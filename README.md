@@ -66,6 +66,7 @@ benchmark_results.csv  33,000-row per-seed result table
 benchmark_summary.csv  Aggregated summary metrics
 data/raw/            Locally-stored CSVs for datasets not covered by sklift
 data/processed/      Feather-cached per-seed outputs (regenerable; .gitignored)
+paper.tex            the latex paper
 fig_qini_gap.png     Figure 1 of the paper
 fig_cal_gap.png      Figure 2 of the paper
 ```
