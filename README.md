@@ -78,14 +78,14 @@ from learner import get_learner
 from metrics import qini, calibration_error
 
 # Load a dataset
-X, W, Y, propensity = get_dataset('hillstrom_visit', random_state=42)
+X, W, Y, _ = get_dataset('hillstrom_visit', random_state=42)
 
 # Instantiate and fit a Q-Learner
-learner = get_learner('q', random_state=42)
-learner.fit(X, W, Y, propensity=propensity)
+learner = get_learner('q')
+learner.fit(X, W, Y)
 
 # Predict ratio CATEs
-tau = learner.predict(X, propensity=propensity)
+tau = learner.predict(X)
 
 # Evaluate
 print(f"Qini  = {qini(Y, W, tau):.3f}")
