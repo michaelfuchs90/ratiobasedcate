@@ -66,7 +66,7 @@ benchmark_results.csv  33,000-row per-seed result table
 benchmark_summary.csv  Aggregated summary metrics
 data/raw/            Locally-stored CSVs for datasets not covered by sklift
 data/processed/      Feather-cached per-seed outputs (regenerable; .gitignored)
-paper.tex            the latex paper
+paper.tex            Paper source
 fig_qini_gap.png     Figure 1 of the paper
 fig_cal_gap.png      Figure 2 of the paper
 ```
@@ -79,14 +79,14 @@ from learner import get_learner
 from metrics import qini, calibration_error
 
 # Load a dataset
-X, W, Y, _ = get_dataset('hillstrom_visit', random_state=42)
+X, W, Y, propensity = get_dataset('hillstrom_visit', random_state=42)
 
 # Instantiate and fit a Q-Learner
-learner = get_learner('q')
-learner.fit(X, W, Y)
+learner = get_learner('q', random_state=42)
+learner.fit(X, W, Y, propensity=propensity)
 
 # Predict ratio CATEs
-tau = learner.predict(X)
+tau = learner.predict(X, propensity=propensity)
 
 # Evaluate
 print(f"Qini  = {qini(Y, W, tau):.3f}")
