@@ -231,15 +231,11 @@ derived from the influence function of the ratio functional.
 
 \paragraph{Ratio-based CATE Estimation.}
 Closest to our setting, \citet{yadlowsky2021ratio} propose a doubly
-robust estimator for the ratio-based CATE using observational data,
-combining propensity- and outcome-regression-based pseudo-outcomes
-followed by arbitrary second-stage regression. Our work differs in three
-ways: (i) we introduce the Q-Learner parameterisation, which reduces
-ratio-CATE estimation to two classification tasks without requiring
-outcome regression; (ii) we derive \emph{two distinct} DR
-augmentations (DR-S/T and DR-Q) and characterise their differing
-robustness properties (classical vs.\ conditional); and (iii) we
-empirically benchmark both families across twelve datasets. Causal
+robust estimator for the ratio-based CATE restricted to a log-linear
+semiparametric model $D(z) = \exp(\beta_0^\top z)$. Our work imposes no
+parametric structure on $\tau(x)$, introduces the Q-Learner
+parameterisation that requires no outcome regression, and derives two
+distinct DR augmentations with differing robustness properties. Causal
 forests \citep{athey2019grf} estimate heterogeneous effects via local
 moment conditions and can in principle target non-standard functionals,
 but do not provide an out-of-the-box estimator or efficiency theory for
@@ -1015,15 +1011,16 @@ the regularisation benefit of joint outcome modelling is largely
 absorbed once the log transform stabilises the pseudo-outcomes on the
 small observational datasets ($n = 1.6$k--$9.2$k).
 
-\paragraph{Collapse of DR-Q.}
-The most striking result is the failure of DR-Q (mean Qini ratio
-$0.30$, $\sigma_D = 0.69$, the highest in the panel): it produces
-\emph{negative} Qini on both RHC ($-0.106$) and NHEFS ($-0.082$),
-meaning worse-than-random targeting. This confirms that
-DR-Q's conditional robustness requires exact propensity knowledge
-(Section~\ref{res:dr-q-direct}), which is unavailable in observational
-settings. DR-Q log (mean ratio $0.60$) fares substantially better due
-to variance stabilisation, but still lags behind DR-S/T log.
+\paragraph{Conditional vs.\ classical robustness.}
+DR-Q direct produces negative Qini on both RHC ($-0.106$) and NHEFS
+($-0.082$), with a mean ratio of $0.30$ and the highest $\sigma_D$ in
+the panel. However, attributing this entirely to conditional robustness
+would be misleading: the direct scale introduces additional variance that
+amplifies the problem. The cleaner test is DR-Q log (mean ratio $0.60$),
+which isolates the robustness penalty by removing direct-scale variance.
+DR-Q log still lags DR-S log ($0.78$) and DR-T log ($0.75$), confirming
+that conditional robustness is a genuine disadvantage in observational
+settings, but the gap is moderate rather than catastrophic.
 
 \paragraph{Log vs.\ direct scale.}
 Across all DR learners, log-scale variants consistently outperform
@@ -1089,10 +1086,10 @@ score-level decisions.
     propensity must be estimated, the picture reverses. Log-scale DR
     learners dominate, while plug-in learners fall well behind and
     direct-scale DR lags its log-scale counterparts. The log transform
-    is the decisive ingredient. DR-Q collapses entirely in this setting,
-    producing negative Qini on two datasets, confirming that its
-    conditional robustness requires exact propensity knowledge unavailable
-    in observational settings.
+    is the decisive ingredient. DR-Q direct performs poorly in this
+    setting, producing negative Qini on two datasets; the log-scale
+    variant fares better, but conditional robustness remains a genuine
+    disadvantage when exact propensity knowledge is unavailable.
 
     \item \textbf{Calibration: S-Learner is universally best.} The
     S-Learner dominates calibration in both settings, followed by other
@@ -1133,9 +1130,9 @@ nearly as competitive as the Q-Learner on most RCT datasets and
 computationally cheaper. In observational settings, the picture reverses:
 the log-scale DR learners introduced here clearly dominate, confirming
 that classical double robustness and log-scale variance stabilisation are
-both necessary when propensity must be estimated. DR-Q's conditional
-robustness proves insufficient under confounding, producing
-worse-than-random targeting on two datasets. Across both settings, the
+both necessary when propensity must be estimated. DR-Q direct produces worse-than-random targeting on two datasets; the
+log-scale variant fares better, but conditional robustness remains a
+genuine disadvantage when propensity must be estimated. Across both settings, the
 S-Learner is the best-calibrated method.
 
 These results suggest a simple decision rule: use plug-in learners
@@ -1334,10 +1331,10 @@ Richardson, T.~S., Robins, J.~M., and Wang, L. (2017).
 On modeling and estimation for the relative risk and risk difference.
 \emph{Journal of the American Statistical Association}, 112(519):1121--1130.
 
-\bibitem[Yadlowsky et~al.(2020)]{yadlowsky2021ratio}
-Yadlowsky, S., Pellegrini, F., Lionetto, F., Braune, S., and Tian, L. (2020).
+\bibitem[Yadlowsky et~al.(2021)]{yadlowsky2021ratio}
+Yadlowsky, S., Pellegrini, F., Lionetto, F., Braune, S., and Tian, L. (2021).
 Estimation and validation of ratio-based conditional average treatment effects using observational data.
-\emph{arXiv preprint arXiv:1912.06977}.
+\emph{Journal of the American Statistical Association}, 116(536):1946--1960.
 
 
 \end{thebibliography}
@@ -1465,7 +1462,7 @@ DR-S log
 
 
 \subsection{Calibration}
-\begin{table}[t]
+\begin{table}[H]
 \centering
 \footnotesize
 \caption{CalError on RCT datasets (best of base/calibrated, mean over 100 seeds; SE in parentheses). Best per column in \textbf{bold}. $\sigma_D$ is the cross-dataset standard deviation of the per-dataset ratio $\mathrm{CE}_{l,d}/\min_{l'} \mathrm{CE}_{l',d}$. Bottom row: mean across all learners per dataset.}
@@ -1523,7 +1520,7 @@ DR-S log
 
 
 
-\begin{table}[t]
+\begin{table}[H]
 \centering
 \footnotesize
 \caption{CalError on observational datasets (best of base/calibrated, mean over 100 seeds; SE in parentheses). Best per column in \textbf{bold}. $\sigma_D$ is the cross-dataset standard deviation of the per-dataset ratio $\mathrm{CE}_{l,d}/\min_{l'} \mathrm{CE}_{l',d}$. Bottom row: mean across all learners per dataset. `--' indicates that the learner produces non-positive predictions on that dataset, making log-scale calibration error undefined.}
