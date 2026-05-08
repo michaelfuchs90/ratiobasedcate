@@ -79,68 +79,66 @@
 
 \maketitle
 \begin{abstract}
-When treatment decisions depend on relative lift rather than absolute
-differences, the ratio-based CATE
+When treatment effects are naturally expressed as ratios --- as in
+medicine, pricing, and marketing, where varying baseline rates make
+relative change the natural scale --- the ratio-based CATE
 $\tau(x) = \mathbb{E}[Y|W{=}1,X{=}x] / \mathbb{E}[Y|W{=}0,X{=}x]$ is
 the appropriate estimand. Yet existing estimators either impose log-linear
 parametric structure or apply generic regression without robustness
 guarantees for this functional. We introduce the \emph{Q-Learner}, which
-decomposes $\tau(x)$ into a product of two odds ratios, enabling direct
-estimation of the ratio CATE via two propensity models without
-requiring outcome regression. We further derive doubly robust
-augmentations for both S/T- and Q-style ratio learners and characterize
-their distinct robustness properties. In benchmarks on seven RCT datasets,
-no single learner dominates, but overall plug-in learners prove sufficient,
-with the S- and Q-Learner standing out as the most consistent across datasets.
+decomposes $\tau(x)$ into a product of two odds ratios, reducing
+ratio-CATE estimation for binary outcomes to two propensity
+classification tasks. We further derive doubly robust augmentations for
+both S/T- and Q-style ratio learners and characterize their distinct
+robustness properties. In benchmarks on seven RCT datasets, no single
+learner dominates, but overall plug-in learners prove sufficient, with
+the S- and Q-Learner standing out as the most consistent across datasets.
 On five observational datasets, where propensity must be estimated and
-confounding cannot be ruled out, the log-scale DR learners introduced here
-are clearly superior.
+confounding cannot be ruled out, the log-scale DR learners introduced
+here are clearly superior.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:introduction}
 
-Heterogeneous treatment effect estimation is central to causal inference,
-with applications spanning personalized medicine, targeted marketing, and
-public policy. The dominant approach estimates the \emph{difference-based}
-conditional average treatment effect
-\begin{equation}
-\tau_{\text{diff}}(x) = \mathbb{E}[Y|W{=}1,X{=}x] - \mathbb{E}[Y|W{=}0,X{=}x],
-\end{equation}
-for which a rich methodological toolkit exists, including S-, T-, X-, R-,
-and DR-Learners \citep{kunzel2019metalearners, nie2021quasi,
-kennedy2022semiparametric}. For binary outcomes with heterogeneous
-baseline rates, however, the difference-based CATE can be difficult to
-interpret and unstable to estimate. A difference of
-$\tau_{\text{diff}}(x) = 0.05$ represents a sixfold increase when the
-baseline conversion is $\mu_0(x) = 0.01$, but merely a 25\% lift when
-$\mu_0(x) = 0.2$. The ratio-based CATE
+In many domains, treatment effects are naturally expressed as ratios.
+In medicine, relative effects are the dominant reporting format for
+both trials and subgroup analyses \citep{andersen2021}. In pricing,
+treatment effects are most naturally expressed as elasticities ---
+ratios of purchase rates at different price levels --- rather than
+absolute changes in conversion. In marketing, treatment effects are
+routinely reported as relative lift over baseline conversion. In each
+case, the ratio-based CATE
 \begin{equation}
 \label{eq:ratio-cate}
 \tau(x) = \frac{\mathbb{E}[Y|W{=}1,X{=}x]}{\mathbb{E}[Y|W{=}0,X{=}x]}
 \end{equation}
-avoids this dependence on the baseline scale. When baseline rates are low
-but vary widely across subgroups and treatment effects are moderate, the
-ratio-based CATE is often the more natural and stable measure. Conversely,
-when baseline rates are high and relatively homogeneous, the
-difference-based CATE is perfectly adequate and easier to estimate. In
-practice, many applications of interest are naturally in the ratio-CATE regime:
-clinical trials typically exhibit event rates of 1--20\%, and marketing
-campaigns conversion rates of 1--10\%. Empirically, the relative scale
-is often less sensitive to the baseline event rate than the absolute
-scale---\citet{schmid1998} show that control-group event rates
-predict absolute but not relative treatment effects across trials,
+is the appropriate estimand.
+
+The ratio scale is also often more stable than the absolute scale.
+A difference-based effect of $\tau_{\text{diff}}(x) = 0.05$ represents
+a sixfold increase when the baseline is $\mu_0(x) = 0.01$ but merely
+a 25\% lift when $\mu_0(x) = 0.2$. \citet{schmid1998} give
+corresponding empirical evidence: control-group event rates predict
+absolute but not relative treatment effects across clinical trials,
 suggesting that the ratio scale better captures the intrinsic treatment
-mechanism. Relative effects are also the dominant reporting format in
-clinical subgroup analyses \citep{andersen2021, deeks2002}.
+mechanism. Many domains of interest fall naturally in this regime,
+with baseline rates often between 1--20\% in clinical trials and
+1--10\% in marketing campaigns.
 
-
-
-Despite this, the literature on ratio-based CATE estimation is thin. Existing approaches either impose parametric log-linear
-structure that cannot capture complex heterogeneity, or apply generic
-outcome regression (S- or T-Learner style) without exploiting the
-multiplicative structure of the ratio functional and without robustness
-guarantees against model misspecification. 
+Difference-based CATE estimation
+\begin{equation}
+\tau_{\text{diff}}(x) = \mathbb{E}[Y|W{=}1,X{=}x] - \mathbb{E}[Y|W{=}0,X{=}x]
+\end{equation}
+is a mature area, with established meta-learners
+\citep{kunzel2019metalearners, nie2021quasi} and doubly robust
+constructions \citep{kennedy2023optimal}. The literature on ratio-based
+CATE estimation is much thinner. Existing approaches either impose
+parametric log-linear structure that cannot capture complex
+heterogeneity, or apply generic outcome regression (S- or T-Learner
+style) without exploiting the multiplicative structure of the ratio
+functional and without robustness guarantees against model
+misspecification.
 
 
 
@@ -205,29 +203,14 @@ conditional double robustness.
 
 \subsection{Related Work}
 \label{sec:related}
-\paragraph{Doubly Robust and Semiparametric Methods.}
-Augmented inverse-probability-weighted (AIPW) estimators
-\citep{robins1994estimation} provide the foundation for doubly robust
-inference. \citet{bickel1993efficient} and \citet{van2000asymptotic}
-establish the semiparametric efficiency theory we rely on.
-\citet{chernozhukov2018double} introduced cross-fitting to remove
-nuisance-estimation bias, which we adopt throughout.
-\citet{foster2023orthogonal} generalise this line of work via Neyman
-orthogonality, providing the theoretical foundation for loss-based and
-influence-function-based learners of the kind we derive.
-
-\paragraph{Meta-Learners for Difference-Based CATE.}
-\citet{kunzel2019metalearners} introduced S-, T-, and X-Learners.
-\citet{nie2021quasi} proposed the R-Learner, which directly targets
-$\tau_{\text{diff}}(x)$ via a loss-based approach.
-\citet{kennedy2022semiparametric} reviews doubly robust and
-semiparametric methods for CATE estimation, and \citet{kennedy2023optimal}
-establishes oracle rates for the DR-Learner; our DR-S/T and DR-Q
-constructions adapt this pseudo-outcome paradigm to the ratio functional. These methods target
-$\tau_{\text{diff}}(x)$ and do not directly apply to ratio estimation.
-Our outcome-regression-based DR learners (DR-T, DR-S;
-Section~\ref{sec:dr}) and DR-Q learner are ratio-specific constructions
-derived from the influence function of the ratio functional.
+\paragraph{Meta-Learners and Doubly Robust Foundations.}
+Difference-based CATE methodology relies on the meta-learner paradigm
+of \citet{kunzel2019metalearners} and \citet{nie2021quasi}, and on the
+pseudo-outcome and influence-function machinery developed in
+\citet{robins1994estimation}, \citet{chernozhukov2018double},
+\citet{kennedy2023optimal}, and \citet{foster2023orthogonal}. Our
+DR-S/T and DR-Q constructions adapt this machinery to the ratio
+functional.
 
 \paragraph{Ratio-based CATE Estimation.}
 Closest to our setting, \citet{yadlowsky2021ratio} propose a doubly
@@ -243,7 +226,7 @@ the ratio CATE.
 
 \paragraph{Relative Risk Estimation.}
 Log-binomial and modified Poisson regression
-\citep{zou2004modified, greenland2004model} estimate marginal or
+\citep{zou2004modified} estimate marginal or
 conditionally linear relative risks but cannot capture nonlinear
 heterogeneity. \citet{richardson2017modeling} develop a semiparametric
 framework for the joint modelling of the relative risk and the risk
