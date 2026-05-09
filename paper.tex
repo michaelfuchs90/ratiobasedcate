@@ -116,15 +116,17 @@ case, the ratio-based CATE
 is the appropriate estimand.
 
 The ratio scale is also often more stable than the absolute scale.
-A difference-based effect of $\tau_{\text{diff}}(x) = 0.05$ represents
-a sixfold increase when the baseline is $\mu_0(x) = 0.01$ but merely
-a 25\% lift when $\mu_0(x) = 0.2$. \citet{schmid1998} give
-corresponding empirical evidence: control-group event rates predict
-absolute but not relative treatment effects across clinical trials,
-suggesting that the ratio scale better captures the intrinsic treatment
-mechanism. Many domains of interest fall naturally in this regime,
-with baseline rates often between 1--20\% in clinical trials and
-1--10\% in marketing campaigns.
+\citet{schmid1998} give empirical evidence: control-group event rates
+predict absolute but not relative treatment effects across clinical
+trials, suggesting that the ratio scale better captures the intrinsic
+treatment effect. The same point is visible mechanically: the same
+absolute effect $\tau_{\text{diff}}(x) = 0.05$ corresponds to a sixfold
+increase when $\mu_0(x) = 0.01$ but only a 25\% lift when
+$\mu_0(x) = 0.2$. This mechanism is typical when baselines are low and
+variable --- the standard regime in clinical trials (1--20\%) and
+marketing campaigns (1--10\%). When baselines are instead high and
+homogeneous, the difference-based CATE is equally natural and often
+easier to estimate.
 
 Difference-based CATE estimation
 \begin{equation}
@@ -135,10 +137,11 @@ is a mature area, with established meta-learners
 constructions \citep{kennedy2023optimal}. The literature on ratio-based
 CATE estimation is much thinner. Existing approaches either impose
 parametric log-linear structure that cannot capture complex
-heterogeneity, or apply generic outcome regression (S- or T-Learner
-style) without exploiting the multiplicative structure of the ratio
-functional and without robustness guarantees against model
-misspecification.
+heterogeneity \citep{yadlowsky2021ratio, zou2004modified}, or apply
+generic outcome regression (S- or T-Learner style;
+\citealp{kunzel2019metalearners}) without exploiting the multiplicative
+structure of the ratio functional and without robustness guarantees
+against model misspecification.
 
 
 
@@ -151,9 +154,9 @@ regime where the ratio-based CATE is most valuable. Alternatively, one
 could turn the ratio into a difference via
 $\log\tau(x) = \log\mu_1(x) - \log\mu_0(x)$ and apply existing
 difference-based methods on the log scale. However, this still requires
-separate log-outcome models, and no doubly robust estimator for the heterogeneous ratio CATE exists. More generally, robustness
-guarantees derived for difference-based estimators do not transfer through
-nonlinear transformations. Dedicated methods for the ratio functional are
+separate log-outcome models, and robustness guarantees derived for
+difference-based estimators do not transfer through nonlinear
+transformations. Dedicated methods for the ratio functional are
 therefore necessary.
 
 
@@ -163,7 +166,9 @@ therefore necessary.
 \subsection{Contributions}
 
 
-We address this gap with two complementary contributions. First, we
+For binary outcomes (e.g., conversion or claim occurrence), where
+$\tau(x)$ coincides with the conditional relative risk, this paper
+makes two contributions. First, we
 introduce the \emph{Q-Learner}, which exploits a Bayes-rule identity to
 decompose the ratio CATE into a product of two odds ratios:
 \begin{equation*}
@@ -172,7 +177,10 @@ decompose the ratio CATE into a product of two odds ratios:
 \end{equation*}
 This reduces ratio CATE estimation to two binary classification
 tasks (a propensity model and a converter-propensity model) without
-requiring outcome regression. The Q-Learner directly optimizes
+requiring outcome regression. At low conversion rates, this also
+converts a heavily imbalanced regression task into two balanced
+classification tasks and sidesteps the numerical instability of
+$\hat{\mu}_0$ in the denominator. The Q-Learner directly optimizes
 $\hat{\tau}(x)$ through its component classifiers, making it naturally
 amenable to hyperparameter tuning and model selection. 
 We further show that estimating propensity from data is
