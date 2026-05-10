@@ -141,7 +141,7 @@ def load_hillstrom(outcome: str = 'visit', test_size: float = 0.2, random_state:
     return UpliftDataset(X=X, W=W, Y=Y, propensity_true=e, name=f'hillstrom_{outcome}', test_size=test_size, random_state=random_state)
 
 
-def load_criteo(sample_frac: float = 0.1, test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
+def load_criteo(sample_frac: float = 1, test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
     """Criteo Uplift Dataset (sampled)."""
 
     def fetch():

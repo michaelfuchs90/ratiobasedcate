@@ -142,56 +142,6 @@ class QLearner(BaseLearner):
 
 
 
-class XLearner(BaseLearner):
-    """X-Learner adapted for ratio-based CATE.
-
-    Uses model predictions for imputation (not raw Y) to avoid log(0) issues
-    with binary outcomes.
-    """
-
-    def __init__(self, random_state=42):
-        self.random_state = random_state
-
-    def fit(self, X, W, Y, propensity=None):
-        # Propensity model
-        self._e_model = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state).fit(X, W)
-
-        # Outcome models
-        self._m1 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state).fit(X[W==1], Y[W==1])
-        self._m0 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state).fit(X[W==0], Y[W==0])
-
-        # Counterfactual predictions (using model predictions, not raw Y)
-        mu0_for_treated = clip(self._m0.predict_proba(X[W==1])[:, 1], CLIP_OUTCOME_PROB)
-        mu1_for_treated = clip(self._m1.predict_proba(X[W==1])[:, 1], CLIP_OUTCOME_PROB)
-        mu1_for_control = clip(self._m1.predict_proba(X[W==0])[:, 1], CLIP_OUTCOME_PROB)
-        mu0_for_control = clip(self._m0.predict_proba(X[W==0])[:, 1], CLIP_OUTCOME_PROB)
-
-        # Imputed log-ratio effects
-        # For treated: τ̂(x) = μ̂₁(x) / μ̂₀(x) where μ̂₁ from same-group model
-        log_tau_treated = np.log(mu1_for_treated) - np.log(mu0_for_treated)
-        # For control: τ̂(x) = μ̂₁(x) / μ̂₀(x) where μ̂₀ from same-group model
-        log_tau_control = np.log(mu1_for_control) - np.log(mu0_for_control)
-
-        # Clip log-tau values
-        log_tau_treated = clip(log_tau_treated, CLIP_LOG_PSEUDO)
-        log_tau_control = clip(log_tau_control, CLIP_LOG_PSEUDO)
-
-        # Effect models (CATE models)
-        self._tau1 = lgb.LGBMRegressor(**LGBM_PARAMS, random_state=self.random_state).fit(X[W==1], log_tau_treated)
-        self._tau0 = lgb.LGBMRegressor(**LGBM_PARAMS, random_state=self.random_state).fit(X[W==0], log_tau_control)
-        return self
-
-    def predict(self, X, propensity=None):
-        # Always use the estimated propensity model — same reasoning as Q-Learner.
-        e = clip(self._e_model.predict_proba(X)[:, 1], CLIP_PROPENSITY)
-
-        log_tau = (1-e) * self._tau0.predict(X) + e * self._tau1.predict(X)
-        
-        log_tau = clip(log_tau, CLIP_LOG_PSEUDO)
-        tau = np.exp(log_tau)
-        return clip(tau, CLIP_TAU)
-
-
 
 
 # =============================================================================
@@ -594,7 +544,6 @@ ALL_LEARNER = {
     't':              lambda rs: TLearner(rs),
     'q':              lambda rs: QLearner(rs),
     'q_simple':       lambda rs: QSimpleLearner(rs),
-    'x':              lambda rs: XLearner(rs),
     'drt_log':            lambda rs: DRTLearner(random_state=rs),
     'drs_log':            lambda rs: DRSLearner(random_state=rs),
     'drq_log':            lambda rs: DRQLearner(random_state=rs),

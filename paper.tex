@@ -172,9 +172,10 @@ makes two contributions. First, we
 introduce the \emph{Q-Learner}, which exploits a Bayes-rule identity to
 decompose the ratio CATE into a product of two odds ratios:
 \begin{equation*}
-\tau(x) = \frac{P(W{=}1|Y{=}1,X{=}x)}{P(W{=}0|Y{=}1,X{=}x)} \cdot
-           \frac{P(W{=}0|X{=}x)}{P(W{=}1|X{=}x)}.
+\tau(x) = \frac{p(x)}{1-p(x)} \cdot \frac{1-e(x)}{e(x)},
 \end{equation*}
+where $p(x) = P(W{=}1|Y{=}1,X{=}x)$ is the converter propensity and
+$e(x) = P(W{=}1|X{=}x)$ is the treatment propensity.
 This reduces ratio CATE estimation to two binary classification
 tasks (a propensity model and a converter-propensity model) without
 requiring outcome regression. At low conversion rates, this also
@@ -204,9 +205,9 @@ seeds each). In experimental settings with known propensity, no single
 learner dominates, but overall plug-in learners prove sufficient, with the
 S- and Q-Learner standing out as the most consistent across datasets. In
 observational settings, where propensity must be estimated and confounding
-cannot be ruled out, the log-scale DR learners introduced here are clearly
-superior, confirming the theoretical distinction between classical and
-conditional double robustness.
+cannot be ruled out, the S/T log-scale DR learners introduced here are clearly
+superior, confirming the importance of classical double robustness in such
+settings.
 
 
 \subsection{Related Work}
@@ -326,7 +327,6 @@ Beyond these standard quantities, the Q-Learner
     $m(x) = P(Y{=}1 \mid X{=}x)$: the unconditional outcome rate given
     covariates.
 \end{itemize}
-These follow directly from the assumptions above.
 
 %==============================================================================
 \section{The Q-Learner}
@@ -444,7 +444,9 @@ both $\hat{e}(x)$ and $\hat{p}(x)$ increase, and the biases partially
 cancel in the product
 $\frac{\hat{p}}{1-\hat{p}} \cdot \frac{1-\hat{e}}{\hat{e}}$. Using the
 known $e(x)$ breaks this correlation, potentially increasing
-finite-sample variance.
+finite-sample variance. Fitting $\hat{e}(x)$ from data---even though the
+model only captures the randomness of the treatment assignments---preserves
+this correlation and thereby reduces variance.
 
 This variance reduction diminishes with sample size: as $n$ grows, the
 realized propensity concentrates around its true value, and the
@@ -727,53 +729,6 @@ with bias $O_p(\|\hat{p} - p\|_2^2)$.
 
 
 
-\subsection{Choosing the Appropriate Learner}
-\label{sec:choosing}
-
-The theoretical properties derived above directly inform the choice of
-estimator for a given application setting.
-
-\paragraph{Observational studies.}
-When propensity must be estimated from data, outcome-regression-based DR
-learners (DR-T, DR-S) are the only viable choices. DR-Q's conditional
-robustness requires exact propensity knowledge, which is unavailable in
-observational settings; misspecification of $e(x)$ renders DR-Q
-inconsistent regardless of the quality of other nuisance models
-(Section~\ref{res:dr-q-direct}). DR-T and DR-S, by contrast, remain
-consistent if either the propensity or the outcome models are correct
-(Section~\ref{res:dr-t-direct}). Between the two, DR-S uses a joint
-outcome model that provides additional regularization, which can be
-beneficial on smaller datasets.
-
-\paragraph{Randomized experiments.}
-When propensity is known by design, both DR-S/T and DR-Q families are
-applicable. DR-Q-Simple (Section~\ref{sec:dr-q-simple}) is the most
-parsimonious option: it requires only a single nuisance model
-$\hat{p}(x)$, operates only on converters, and avoids estimation of both
-$e(x)$ and $m(x)$. For large datasets, this computational advantage is
-particularly relevant, and the variance cost from using known rather than
-estimated propensity becomes negligible (Section~\ref{sec:q-simple}). The
-full DR-Q may provide efficiency gains through
-the additional augmentation term.
-
-
-\paragraph{Log-scale variants.}
-When treatment effects vary over a wide range, log-scale formulations
-provide natural variance stabilization: the pseudo-outcomes
-$\Gamma_{\log}$ have approximately homoscedastic variance regardless of
-effect magnitude, whereas direct-scale pseudo-outcomes exhibit variance
-that grows with the effect size.
-
-\paragraph{Plug-in vs.\ DR learners.}
-DR augmentation introduces additional variance through the correction
-terms. When nuisance models are well-specified (e.g., in large RCTs with
-simple structure), plug-in methods (Q-Learner, S-Learner) are expected to achieve
-better calibration at the cost of robustness. The choice therefore
-depends on whether the practitioner prioritizes robustness against
-misspecification or calibration accuracy.
-
-Section~\ref{sec:experiments} confirms these theoretical predictions
-empirically and provides quantitative guidance.
 
 
 
@@ -781,23 +736,27 @@ empirically and provides quantitative guidance.
 \label{sec:experiments}
 
 We now systematically evaluate which learner performs best under which
-conditions. In particular, we test whether the
-theoretical expectations from Section~\ref{sec:choosing} hold in
-practice: whether DR-S/T outperforms DR-Q in observational settings (as
-predicted by the distinction between classical and conditional
-robustness), and whether estimating propensity from data outperforms
-using known propensity (Q-Learner vs.\ Q-Simple).
+conditions to give guidance on when to use which. Further, the theoretical
+analysis in Section~\ref{sec:dr} leads to three predictions we want to
+test. First, in observational settings DR-S and DR-T should outperform
+DR-Q: their classical double robustness tolerates propensity
+misspecification, while DR-Q's conditional robustness does not. Second,
+we expect the simple variants of the Q-Learner family to be slightly
+worse than their non-simple counterparts, but by how much is an open
+question. Third, log-scale DR variants should be more stable than their
+direct-scale counterparts when treatment effects vary substantially in
+magnitude.
 
 
 \subsection{Setup}
 
-We evaluate thirteen learners: five plug-in methods (S, T, Q, Q-Simple and X) and seven doubly robust variants (DR-T, DR-T log,
-DR-S, DR-S log, DR-Q, DR-Q log, and DR-Q-Simple for RCTs). Q-Simple and
+We evaluate twelve learners: four plug-in methods (S, T, Q, Q-Simple) and eight doubly robust variants (DR-T, DR-T log,
+DR-S, DR-S log, DR-Q, DR-Q log, DR-Q-Simple, and DR-Q-Simple log). Q-Simple and
 DR-Q-Simple are only applicable to RCT datasets where propensity is known
 by design; observational benchmarks use ten learners.
 
 \paragraph{Datasets.}
-We select datasets to cover a range of sample sizes ($n = 1.6$k--$1.4$M),
+We select datasets to cover a range of sample sizes ($n = 1.6$k--$687$k),
 conversion rates (0.9\%--68\%), and treatment fractions (18\%--85\%).
 We separate RCT datasets, where propensity is known by
 design, from observational datasets, where propensity must be estimated
@@ -809,14 +768,15 @@ distinction between classical and conditional double robustness.
 \centering
 \caption{RCT benchmark datasets. Propensity $e(x)$ is known by design.
 $^*$Semi-synthetic: both potential outcomes observed, treatment simulated
-with $e=0.5$.}
+with $e=0.5$. $^\dagger$10\% random subsample for computational feasibility
+(full dataset: 13.9M rows).}
 \label{tab:datasets-rct}
 \setlength{\tabcolsep}{6pt}
 \begin{tabular}{lrrrl}
 \hline
 Dataset & $n$ & Conv.\ & Treat.\ & Domain \\
 \hline
-Criteo \citep{diemert2018}              & 1{,}398k &  4.7\% & 85.0\% & E-commerce \\
+Criteo$^\dagger$ \citep{diemert2018}    &   140k   &  4.7\% & 85.0\% & E-commerce \\
 Hillstrom (Visit) \citep{hillstrom2008} &  64k     & 14.7\% & 66.8\% & Email \\
 Hillstrom (Conv.) \citep{hillstrom2008} &  64k     &  0.9\% & 66.8\% & Email \\
 MegaFon \citep{megafon2019}             & 600k     & 20.4\% & 50.1\% & Telecom \\
@@ -905,8 +865,11 @@ $R^C_{l,d} = \mathrm{CalError}_{l,d} / \min_{l'} \mathrm{CalError}_{l',d}$
 learner's calibration error is twice that of the best-calibrated learner on that dataset).
 These ratios are invariant to dataset-specific scale, so a Lenta-sized Qini
 of $0.02$ and a MegaFon-sized Qini of $1.3$ contribute comparably to
-the cross-dataset average. As a stability measure we additionally
-report $\sigma_D$, the cross-dataset standard deviation of these ratios.
+the cross-dataset average. To complement the mean with a worst-case
+view, we additionally report $R_{\min}^Q = \min_{d} R^Q_{l,d}$ (and
+analogously $R_{\max}^C = \max_{d} R^C_{l,d}$ for calibration): the
+worst per-dataset ratio a learner attains. A high mean paired with a
+high $R_{\min}^Q$ indicates a learner that is stable across datasets.
 Full per-dataset Qini values and standard errors across 100 seeds are in
 Appendix~\ref{app:sec:full-results}.
 
@@ -933,9 +896,9 @@ closer to one with lower variance are more reliably competitive.
 \centering
 \includegraphics[width=\textwidth]{fig_qini_gap.png}
 \caption{Mean Qini ratio to the best learner per dataset ($1$ = best) vs.\
-cross-dataset standard deviation of the ratio, for RCT (left) and
+worst-case Qini ratio across datasets ($1$ = best), for RCT (left) and
 observational (right) datasets. The ideal learner sits in the
-upper-left corner (high ratio, low variance).}
+upper-right corner (high mean, high worst-case).}
 \label{fig:qini-gap}
 \end{figure}
 
@@ -944,19 +907,20 @@ upper-left corner (high ratio, low variance).}
 Table~\ref{tab:results-rct} (Appendix~\ref{app:sec:full-results}) reports
 per-dataset Qini coefficients on the seven RCT datasets.
 \textbf{No single learner dominates}: seven datasets produce six
-different winners (DR-S, DR-Q-Simple, DR-Q, T-Learner, Q-Learner, and
-X-Learner). In the cross-dataset ratio-to-best summary
+different winners (DR-S on two datasets, DR-Q-Simple, DR-Q, T-Learner,
+Q-Learner, and DR-T log). In the cross-dataset ratio-to-best summary
 (Figure~\ref{fig:qini-gap}, left panel), the \textbf{Q-Learner and
 S-Learner are effectively tied} for the most consistently competitive
 method: both attain a mean Qini ratio of $0.76$ of the dataset-optimal
-value, and the Q-Learner additionally has the lowest cross-dataset
-standard deviation ($\sigma_D = 0.23$ vs.\ $0.25$ for the S-Learner).
+value, but the Q-Learner is markedly more stable across datasets:
+its worst-case ratio is $R_{\min}^Q = 0.40$, compared to $0.30$ for
+the S-Learner (which drops to that level on Lenta).
 
 The broader pattern on RCT data is that \textbf{plug-in learners are
 more consistently competitive than their doubly robust counterparts}:
-the top three positions by mean Qini ratio are all held by plug-ins
-(Q: $0.76$, S: $0.76$, X: $0.72$), while every DR variant falls below
-$0.68$. On the four RCTs where a DR variant is the outright winner
+the top two positions by mean Qini ratio are held by plug-ins
+(Q: $0.76$, S: $0.76$), while the best DR variant (DR-Q-Simple)
+reaches $0.68$ and every other DR variant falls below $0.64$. On the four RCTs where a DR variant is the outright winner
 (H(Vis), H(Conv), Criteo, X5), the best plug-in attains between $84\%$
 and $96\%$ of the DR winner's Qini, so even in the cases where DR
 wins, plug-ins follow very closely. This matches the theoretical
@@ -988,12 +952,12 @@ per-dataset Qini coefficients on the five observational datasets.
 The log-scale DR learners occupy the top three positions:
 \textbf{DR-S log} ($0.78$), DR-T log ($0.75$), DR-Q log ($0.60$). All
 three plug-in learners fall below the log-scale DR group: S ($0.58$),
-T ($0.51$), X ($0.41$). The direct-scale DR learners are intermediate
+T ($0.51$), Q ($0.41$). The direct-scale DR learners are intermediate
 between the log-scale DR group and the plug-ins for DR-S ($0.57$) and
 DR-T ($0.58$), and below all other learners for DR-Q ($0.30$).
 
-This reflects the theoretical prediction from
-Section~\ref{sec:choosing}: outcome-regression-based DR learners with
+This confirms the first theoretical prediction from
+Section~\ref{sec:experiments}: outcome-regression-based DR learners with
 classical double robustness (DR-S/T) outperform both plug-in methods
 and DR-Q in observational settings once the log transform is applied.
 The advantage of DR-S over DR-T is small in this regime (log-scale:
@@ -1004,8 +968,9 @@ small observational datasets ($n = 1.6$k--$9.2$k).
 
 \paragraph{Conditional vs.\ classical robustness.}
 DR-Q direct produces negative Qini on both RHC ($-0.106$) and NHEFS
-($-0.082$), with a mean ratio of $0.30$ and the highest $\sigma_D$ in
-the panel. However, attributing this entirely to conditional robustness
+($-0.082$), with a mean ratio of $0.30$ and a worst-case ratio of
+$R_{\min}^Q = -0.55$ on RHC---the largest failure across all learners
+in the panel. However, attributing this entirely to conditional robustness
 would be misleading: the direct scale introduces additional variance that
 amplifies the problem. The cleaner test is DR-Q log (mean ratio $0.60$),
 which isolates the robustness penalty by removing direct-scale variance.
@@ -1039,21 +1004,21 @@ other methods must be applied, which is beyond the scope of the paper.
 \centering
 \includegraphics[width=\textwidth]{fig_cal_gap.png}
 \caption{Mean calibration-error ratio to the best-calibrated learner per
-dataset ($1$ = best) vs.\ cross-dataset standard deviation of the
-ratio, for RCT (left) and observational (right) datasets. Each learner
-at its best calibration configuration. The ideal learner sits at the
-bottom-left corner (low ratio, low variance).}
+dataset ($1$ = best) vs.\ worst-case calibration-error ratio across
+datasets ($1$ = best), for RCT (left) and observational (right) datasets.
+Each learner at its best calibration configuration. The ideal learner
+sits at the bottom-left corner (low mean, low worst-case).}
 \label{fig:cal-gap}
 \end{figure}
 
 Figure~\ref{fig:cal-gap} shows the calibration-error ratio across
 datasets. On RCT data, the \textbf{S-Learner} dominates calibration
-(mean ratio $1.02$, $\sigma_D = 0.03$), followed by X-Learner
-($1.08$) and DR-S log ($1.11$). DR learners on direct scale remain
+(mean ratio $1.02$, $R_{\max}^C = 1.08$), followed by DR-S log
+($1.11$) and DR-S ($1.19$). DR learners on direct scale remain
 poorly calibrated even after recalibration. On observational data,
 the pattern is similar: the S-Learner is the best-calibrated learner
-on every single observational dataset (mean ratio $1.00$ with
-$\sigma_D = 0.00$). The log-scale DR variants that dominate ranking
+on every single observational dataset (mean ratio $1.00$,
+$R_{\max}^C = 1.00$). The log-scale DR variants that dominate ranking
 are among the worst-calibrated learners: DR-T log reaches a mean
 ratio of $2.05$ and DR-S log $1.69$, substantially worse than their
 direct-scale counterparts (DR-T: $1.60$, DR-S: $1.19$). The ranking
@@ -1144,14 +1109,15 @@ classifiers directly optimise $\hat{\tau}(x)$.
 All code, dataset loaders, and scripts to reproduce the experiments in
 this paper are available at
 \url{https://github.com/michaelfuchs90/ratiobasedcate}.
-The repository includes the 33{,}000-row benchmark CSV, the notebook that
+The repository includes the 25{,}800-row benchmark CSV, the notebook that
 generates all figures and tables, and a README with replication
 instructions.
 
 \paragraph{Acknowledgements.}
-I thank Kristina Weidner and Marco Breitig for reading through the
-manuscript and providing valuable feedback, and Dominik Krei\ss{} for
-stimulating conversations about the topic.
+I thank Dominik Krei\ss{}, Marco Breitig, and Kristina Weidner for
+valuable comments on earlier drafts. I am especially grateful to
+Dominik Krei\ss{} for discussions that motivated key parts of this
+work.
 
 %==============================================================================
 % REFERENCES
@@ -1348,107 +1314,104 @@ Estimation and validation of ratio-based conditional average treatment effects u
 \begin{table}[H]
 \centering
 \footnotesize
-\caption{Qini coefficient on RCT datasets (mean over 100 seeds; SE in parentheses). Best per column in \textbf{bold}. $\sigma_D$ is the cross-dataset standard deviation of the per-dataset ratio $Q_{l,d}/\max_{l'} Q_{l',d}$. Bottom row: mean across all learners per dataset.}
+\caption{Qini coefficient on RCT datasets (mean over 100 seeds; SE in parentheses). Best per column in \textbf{bold}. $R_{\min}$ is the worst-case per-dataset ratio $Q_{l,d}/\max_{l'} Q_{l',d}$ across datasets. Bottom row: mean across all learners per dataset.}
 \label{tab:results-rct}
 \setlength{\tabcolsep}{3pt}
 \begin{tabular}{l | rrrrrrr | r r}
 \hline
-Learner & H(Vis) & H(Conv) & Criteo & MegaFon & X5 & Lenta & Twins & $\bar{Q}$ & $\sigma_D$ \\
+Learner & H(Vis) & H(Conv) & Criteo & MegaFon & X5 & Lenta & Twins & $\bar{Q}$ & $R_{\min}$ \\
 \hline
 S
- & 0.435 & 0.371 & 0.334 & 1.424 & 0.073 & 0.027 & 0.087 & \textbf{0.393} & 0.249 \\
+ & 0.435 & 0.371 & 0.334 & 1.424 & 0.073 & 0.027 & 0.087 & \textbf{0.393} & 0.298 \\
  & \scriptsize(0.016) & \scriptsize(0.065) & \scriptsize(0.007) & \scriptsize(0.005) & \scriptsize(0.001) & \scriptsize(0.005) & \scriptsize(0.006) & & \\[2pt]
 T
- & 0.321 & 0.181 & 0.263 & \textbf{1.533} & 0.055 & 0.025 & 0.076 & 0.351 & 0.268 \\
+ & 0.321 & 0.181 & 0.263 & \textbf{1.533} & 0.055 & 0.025 & 0.076 & 0.351 & 0.276 \\
  & \scriptsize(0.015) & \scriptsize(0.049) & \scriptsize(0.007) & \scriptsize(0.005) & \scriptsize(0.001) & \scriptsize(0.004) & \scriptsize(0.008) & & \\[2pt]
 Q
- & 0.219 & 0.507 & 0.454 & 1.228 & 0.030 & \textbf{0.089} & 0.086 & 0.373 & 0.233 \\
+ & 0.219 & 0.507 & 0.454 & 1.228 & 0.030 & \textbf{0.089} & 0.086 & 0.373 & 0.399 \\
  & \scriptsize(0.012) & \scriptsize(0.053) & \scriptsize(0.009) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.004) & \scriptsize(0.008) & & \\[2pt]
 Q-Simple
- & 0.215 & 0.516 & 0.427 & 1.236 & 0.025 & 0.002 & 0.083 & 0.358 & 0.335 \\
+ & 0.215 & 0.516 & 0.427 & 1.236 & 0.025 & 0.002 & 0.083 & 0.358 & 0.022 \\
  & \scriptsize(0.012) & \scriptsize(0.051) & \scriptsize(0.007) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.003) & \scriptsize(0.008) & & \\[2pt]
-X
- & 0.408 & 0.150 & 0.351 & 1.295 & 0.069 & 0.043 & \textbf{0.093} & 0.344 & 0.267 \\
- & \scriptsize(0.018) & \scriptsize(0.045) & \scriptsize(0.008) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.005) & \scriptsize(0.007) & & \\[2pt]
 \hline
 DR-Q
- & 0.356 & 0.580 & \textbf{0.508} & 1.184 & 0.070 & $-$0.017 & 0.013 & 0.385 & 0.461 \\
+ & 0.356 & 0.580 & \textbf{0.508} & 1.184 & 0.070 & $-$0.017 & 0.013 & 0.385 & $-$0.195 \\
  & \scriptsize(0.016) & \scriptsize(0.055) & \scriptsize(0.009) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.005) & \scriptsize(0.009) & & \\[2pt]
 DR-Q log
- & 0.268 & 0.514 & 0.193 & 1.263 & 0.058 & 0.014 & 0.085 & 0.342 & 0.278 \\
+ & 0.268 & 0.514 & 0.193 & 1.263 & 0.058 & 0.014 & 0.085 & 0.342 & 0.160 \\
  & \scriptsize(0.015) & \scriptsize(0.054) & \scriptsize(0.004) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.003) & \scriptsize(0.006) & & \\[2pt]
 DR-Q-Simple
- & 0.336 & \textbf{0.615} & 0.461 & 1.145 & 0.043 & $-$0.003 & 0.080 & 0.383 & 0.345 \\
+ & 0.336 & \textbf{0.615} & 0.461 & 1.145 & 0.043 & $-$0.003 & 0.080 & 0.383 & $-$0.035 \\
  & \scriptsize(0.015) & \scriptsize(0.061) & \scriptsize(0.009) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.003) & \scriptsize(0.006) & & \\[2pt]
 DR-Q-Simple log
- & 0.243 & 0.600 & 0.449 & 1.229 & 0.026 & 0.006 & 0.073 & 0.375 & 0.331 \\
+ & 0.243 & 0.600 & 0.449 & 1.229 & 0.026 & 0.006 & 0.073 & 0.375 & 0.066 \\
  & \scriptsize(0.014) & \scriptsize(0.049) & \scriptsize(0.008) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.003) & \scriptsize(0.011) & & \\[2pt]
 DR-T
- & 0.438 & 0.010 & 0.331 & 1.236 & 0.075 & 0.016 & 0.003 & 0.301 & 0.425 \\
+ & 0.438 & 0.010 & 0.331 & 1.236 & 0.075 & 0.016 & 0.003 & 0.301 & 0.017 \\
  & \scriptsize(0.017) & \scriptsize(0.035) & \scriptsize(0.008) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.005) & \scriptsize(0.010) & & \\[2pt]
 DR-T log
- & 0.319 & 0.109 & 0.157 & 1.253 & 0.059 & 0.016 & 0.092 & 0.286 & 0.332 \\
+ & 0.319 & 0.109 & 0.157 & 1.253 & 0.059 & 0.016 & \textbf{0.092} & 0.286 & 0.177 \\
  & \scriptsize(0.014) & \scriptsize(0.040) & \scriptsize(0.003) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.004) & \scriptsize(0.006) & & \\[2pt]
 DR-S
- & \textbf{0.473} & 0.321 & 0.343 & 1.195 & \textbf{0.076} & 0.004 & $-$0.002 & 0.344 & 0.419 \\
+ & \textbf{0.473} & 0.321 & 0.343 & 1.195 & \textbf{0.076} & 0.004 & $-$0.002 & 0.344 & $-$0.016 \\
  & \scriptsize(0.017) & \scriptsize(0.053) & \scriptsize(0.007) & \scriptsize(0.004) & \scriptsize(0.002) & \scriptsize(0.005) & \scriptsize(0.010) & & \\[2pt]
 DR-S log
- & 0.330 & 0.361 & 0.102 & 1.259 & 0.058 & 0.005 & 0.091 & 0.315 & 0.336 \\
+ & 0.330 & 0.361 & 0.102 & 1.259 & 0.058 & 0.005 & 0.091 & 0.315 & 0.060 \\
  & \scriptsize(0.015) & \scriptsize(0.060) & \scriptsize(0.002) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.003) & \scriptsize(0.006) & & \\
 \hline
-\textit{Dataset mean} & 0.336 & 0.372 & 0.337 & 1.268 & 0.055 & 0.017 & 0.066 & & \\
+\textit{Dataset mean} & 0.329 & 0.391 & 0.335 & 1.265 & 0.054 & 0.015 & 0.064 & & \\
 \hline
 \end{tabular}
 \end{table}
 
-\subsection{Qini on Observational Datasets}
 
+
+
+\subsection{Qini on Observational Datasets}
 \begin{table}[H]
 \centering
 \footnotesize
-\caption{Qini coefficient on observational datasets (mean over 100 seeds; SE in parentheses). Best per column in \textbf{bold}. $\sigma_D$ is the cross-dataset standard deviation of the per-dataset ratio $Q_{l,d}/\max_{l'} Q_{l',d}$. Bottom row: mean across all learners per dataset.}
+\caption{Qini coefficient on observational datasets (mean over 100 seeds; SE in parentheses). Best per column in \textbf{bold}. $R_{\min}$ is the worst-case per-dataset ratio $Q_{l,d}/\max_{l'} Q_{l',d}$ across datasets. Bottom row: mean across all learners per dataset.}
 \label{tab:results-obs}
 \setlength{\tabcolsep}{3pt}
 \begin{tabular}{l | rrrrr | r r}
 \hline
-Learner & LaLonde & RHC & Cattaneo & NHEFS & JTPA & $\bar{Q}$ & $\sigma_D$ \\
+Learner & LaLonde & RHC & Cattaneo & NHEFS & JTPA & $\bar{Q}$ & $R_{\min}$ \\
 \hline
 S
- & 0.153 & 0.014 & 1.124 & 0.132 & 0.032 & 0.291 & 0.362 \\
+ & 0.153 & 0.014 & 1.124 & 0.132 & 0.032 & 0.291 & 0.074 \\
  & \scriptsize(0.022) & \scriptsize(0.005) & \scriptsize(0.096) & \scriptsize(0.047) & \scriptsize(0.006) & & \\[2pt]
 T
- & 0.146 & 0.014 & 1.098 & 0.129 & 0.013 & 0.280 & 0.388 \\
+ & 0.146 & 0.014 & 1.098 & 0.129 & 0.013 & 0.280 & 0.074 \\
  & \scriptsize(0.020) & \scriptsize(0.005) & \scriptsize(0.098) & \scriptsize(0.048) & \scriptsize(0.006) & & \\[2pt]
 Q
- & 0.083 & 0.061 & 0.637 & 0.111 & 0.019 & 0.182 & 0.116 \\
+ & 0.083 & 0.061 & 0.637 & 0.111 & 0.019 & 0.182 & 0.264 \\
  & \scriptsize(0.019) & \scriptsize(0.008) & \scriptsize(0.107) & \scriptsize(0.041) & \scriptsize(0.006) & & \\[2pt]
-X
- & 0.115 & 0.014 & 1.113 & 0.005 & 0.026 & 0.255 & 0.378 \\
- & \scriptsize(0.019) & \scriptsize(0.005) & \scriptsize(0.115) & \scriptsize(0.038) & \scriptsize(0.007) & & \\[2pt]
 \hline
 DR-Q
- & 0.124 & $-$0.106 & 0.726 & $-$0.082 & \textbf{0.071} & 0.147 & 0.692 \\
+ & 0.124 & $-$0.106 & 0.726 & $-$0.082 & \textbf{0.071} & 0.147 & $-$0.549 \\
  & \scriptsize(0.019) & \scriptsize(0.011) & \scriptsize(0.091) & \scriptsize(0.043) & \scriptsize(0.008) & & \\[2pt]
 DR-Q log
- & 0.101 & 0.087 & 1.040 & 0.229 & 0.012 & 0.294 & 0.292 \\
+ & 0.101 & 0.087 & 1.040 & 0.229 & 0.012 & 0.294 & 0.169 \\
  & \scriptsize(0.022) & \scriptsize(0.014) & \scriptsize(0.115) & \scriptsize(0.045) & \scriptsize(0.006) & & \\[2pt]
 DR-T
- & \textbf{0.154} & 0.098 & 0.922 & $-$0.050 & 0.063 & 0.237 & 0.473 \\
+ & \textbf{0.154} & 0.098 & 0.922 & $-$0.050 & 0.063 & 0.237 & $-$0.199 \\
  & \scriptsize(0.023) & \scriptsize(0.011) & \scriptsize(0.099) & \scriptsize(0.038) & \scriptsize(0.008) & & \\[2pt]
 DR-T log
- & 0.133 & 0.193 & 1.126 & 0.234 & 0.006 & 0.338 & 0.373 \\
+ & 0.133 & 0.193 & 1.126 & 0.234 & 0.006 & 0.338 & 0.087 \\
  & \scriptsize(0.022) & \scriptsize(0.015) & \scriptsize(0.099) & \scriptsize(0.036) & \scriptsize(0.006) & & \\[2pt]
 DR-S
- & 0.133 & 0.098 & 0.866 & $-$0.035 & 0.067 & 0.226 & 0.430 \\
+ & 0.133 & 0.098 & 0.866 & $-$0.035 & 0.067 & 0.226 & $-$0.139 \\
  & \scriptsize(0.021) & \scriptsize(0.011) & \scriptsize(0.081) & \scriptsize(0.035) & \scriptsize(0.008) & & \\[2pt]
 DR-S log
- & 0.120 & \textbf{0.193} & \textbf{1.313} & \textbf{0.253} & 0.010 & \textbf{0.378} & 0.372 \\
+ & 0.120 & \textbf{0.193} & \textbf{1.313} & \textbf{0.253} & 0.010 & \textbf{0.378} & 0.141 \\
  & \scriptsize(0.022) & \scriptsize(0.015) & \scriptsize(0.108) & \scriptsize(0.041) & \scriptsize(0.006) & & \\
 \hline
-\textit{Dataset mean} & 0.126 & 0.067 & 0.997 & 0.093 & 0.032 & & \\
+\textit{Dataset mean} & 0.127 & 0.072 & 0.984 & 0.102 & 0.033 & & \\
 \hline
 \end{tabular}
 \end{table}
+
 
 
 
@@ -1456,55 +1419,52 @@ DR-S log
 \begin{table}[H]
 \centering
 \footnotesize
-\caption{CalError on RCT datasets (best of base/calibrated, mean over 100 seeds; SE in parentheses). Best per column in \textbf{bold}. $\sigma_D$ is the cross-dataset standard deviation of the per-dataset ratio $\mathrm{CE}_{l,d}/\min_{l'} \mathrm{CE}_{l',d}$. Bottom row: mean across all learners per dataset.}
+\caption{CalError on RCT datasets (best of base/calibrated, mean over 100 seeds; SE in parentheses). Best per column in \textbf{bold}. $R_{\max}$ is the worst-case per-dataset ratio $\mathrm{CE}_{l,d}/\min_{l'} \mathrm{CE}_{l',d}$ across datasets. Bottom row: mean across all learners per dataset.}
 \label{tab:cal-rct}
 \setlength{\tabcolsep}{3pt}
 \begin{tabular}{l | rrrrrrr | r r}
 \hline
-Learner & H(Vis) & H(Conv) & Criteo & MegaFon & X5 & Lenta & Twins & $\overline{\mathrm{CE}}$ & $\sigma_D$ \\
+Learner & H(Vis) & H(Conv) & Criteo & MegaFon & X5 & Lenta & Twins & $\overline{\mathrm{CE}}$ & $R_{\max}$ \\
 \hline
 S
- & \textbf{1.224} & 2.316 & 1.110 & 1.076 & \textbf{1.024} & \textbf{1.113} & 1.397 & \textbf{1.323} & 0.031 \\
+ & \textbf{1.224} & 2.316 & 1.110 & 1.076 & \textbf{1.024} & \textbf{1.113} & 1.397 & \textbf{1.323} & 1.084 \\
  & \scriptsize(0.006) & \scriptsize(0.043) & \scriptsize(0.004) & \scriptsize(0.002) & \scriptsize(0.001) & \scriptsize(0.003) & \scriptsize(0.012) & & \\[2pt]
 T
- & 1.490 & 3.295 & 1.211 & 1.103 & 1.057 & 1.322 & 1.961 & 1.634 & 0.195 \\
+ & 1.490 & 3.295 & 1.211 & 1.103 & 1.057 & 1.322 & 1.961 & 1.634 & 1.543 \\
  & \scriptsize(0.007) & \scriptsize(0.069) & \scriptsize(0.005) & \scriptsize(0.001) & \scriptsize(0.001) & \scriptsize(0.004) & \scriptsize(0.018) & & \\[2pt]
 Q
- & 1.507 & 3.958 & 1.130 & 1.125 & 1.078 & 1.290 & 2.137 & 1.746 & 0.313 \\
+ & 1.507 & 3.958 & 1.130 & 1.125 & 1.078 & 1.290 & 2.137 & 1.746 & 1.853 \\
  & \scriptsize(0.008) & \scriptsize(0.104) & \scriptsize(0.003) & \scriptsize(0.001) & \scriptsize(0.001) & \scriptsize(0.004) & \scriptsize(0.023) & & \\[2pt]
 Q-Simple
- & 1.514 & 3.979 & 1.153 & 1.130 & 1.075 & 1.387 & 2.148 & 1.770 & 0.309 \\
+ & 1.514 & 3.979 & 1.153 & 1.130 & 1.075 & 1.387 & 2.148 & 1.770 & 1.863 \\
  & \scriptsize(0.008) & \scriptsize(0.100) & \scriptsize(0.005) & \scriptsize(0.001) & \scriptsize(0.001) & \scriptsize(0.005) & \scriptsize(0.024) & & \\[2pt]
-X
- & 1.304 & 2.675 & 1.150 & \textbf{1.043} & 1.031 & 1.157 & 1.527 & 1.412 & 0.088 \\
- & \scriptsize(0.007) & \scriptsize(0.057) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.001) & \scriptsize(0.003) & \scriptsize(0.014) & & \\[2pt]
 \hline
 DR-Q
- & 1.525 & 4.660 & 1.142 & 1.077 & 1.046 & 1.465 & 1.757 & 1.810 & 0.408 \\
+ & 1.525 & 4.660 & 1.142 & 1.077 & 1.046 & 1.465 & 1.757 & 1.810 & 2.182 \\
  & \scriptsize(0.010) & \scriptsize(0.141) & \scriptsize(0.005) & \scriptsize(0.001) & \scriptsize(0.001) & \scriptsize(0.005) & \scriptsize(0.021) & & \\[2pt]
 DR-Q log
- & 1.890 & 3.240 & 1.157 & 1.098 & 1.054 & 1.422 & 1.827 & 1.670 & 0.221 \\
+ & 1.890 & 3.240 & 1.157 & 1.098 & 1.054 & 1.422 & 1.827 & 1.670 & 1.545 \\
  & \scriptsize(0.011) & \scriptsize(0.085) & \scriptsize(0.003) & \scriptsize(0.002) & \scriptsize(0.001) & \scriptsize(0.006) & \scriptsize(0.020) & & \\[2pt]
 DR-Q-Simple
- & 1.613 & 4.147 & 1.251 & 1.087 & 1.091 & 1.849 & 1.536 & 1.796 & 0.345 \\
+ & 1.613 & 4.147 & 1.251 & 1.087 & 1.091 & 1.849 & 1.536 & 1.796 & 1.942 \\
  & \scriptsize(0.009) & \scriptsize(0.136) & \scriptsize(0.009) & \scriptsize(0.001) & \scriptsize(0.001) & \scriptsize(0.013) & \scriptsize(0.013) & & \\[2pt]
 DR-Q-Simple log
- & 1.621 & 4.903 & 1.184 & 1.115 & 1.074 & 1.398 & 2.328 & 1.946 & 0.459 \\
+ & 1.621 & 4.903 & 1.184 & 1.115 & 1.074 & 1.398 & 2.328 & 1.946 & 2.296 \\
  & \scriptsize(0.009) & \scriptsize(0.119) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.001) & \scriptsize(0.004) & \scriptsize(0.027) & & \\[2pt]
 DR-T
- & 1.512 & 7.541 & 1.115 & 1.048 & 1.047 & 1.487 & 1.594 & 2.192 & 0.916 \\
+ & 1.512 & 7.541 & 1.115 & \textbf{1.048} & 1.047 & 1.487 & 1.594 & 2.192 & 3.531 \\
  & \scriptsize(0.011) & \scriptsize(0.227) & \scriptsize(0.005) & \scriptsize(0.001) & \scriptsize(0.001) & \scriptsize(0.006) & \scriptsize(0.014) & & \\[2pt]
 DR-T log
- & 1.890 & 2.784 & 1.234 & 1.092 & 1.055 & 1.457 & 1.583 & 1.585 & 0.182 \\
+ & 1.890 & 2.784 & 1.234 & 1.092 & 1.055 & 1.457 & 1.583 & 1.585 & 1.545 \\
  & \scriptsize(0.011) & \scriptsize(0.060) & \scriptsize(0.006) & \scriptsize(0.001) & \scriptsize(0.001) & \scriptsize(0.006) & \scriptsize(0.015) & & \\[2pt]
 DR-S
- & 1.373 & 3.568 & \textbf{1.101} & 1.064 & 1.045 & 1.517 & 1.573 & 1.606 & 0.245 \\
+ & 1.373 & 3.568 & \textbf{1.101} & 1.064 & 1.045 & 1.517 & 1.573 & 1.606 & 1.671 \\
  & \scriptsize(0.008) & \scriptsize(0.081) & \scriptsize(0.003) & \scriptsize(0.001) & \scriptsize(0.001) & \scriptsize(0.006) & \scriptsize(0.014) & & \\[2pt]
 DR-S log
- & 1.719 & \textbf{2.136} & 1.175 & 1.098 & 1.053 & 1.337 & \textbf{1.363} & 1.411 & 0.148 \\
+ & 1.719 & \textbf{2.136} & 1.175 & 1.098 & 1.053 & 1.337 & \textbf{1.363} & 1.411 & 1.405 \\
  & \scriptsize(0.010) & \scriptsize(0.041) & \scriptsize(0.004) & \scriptsize(0.002) & \scriptsize(0.001) & \scriptsize(0.005) & \scriptsize(0.011) & & \\
 \hline
-\textit{Dataset mean} & 1.552 & 3.785 & 1.163 & 1.089 & 1.056 & 1.400 & 1.748 & & \\
+\textit{Dataset mean} & 1.573 & 3.877 & 1.164 & 1.093 & 1.058 & 1.420 & 1.767 & & \\
 \hline
 \end{tabular}
 \end{table}
@@ -1514,49 +1474,47 @@ DR-S log
 \begin{table}[H]
 \centering
 \footnotesize
-\caption{CalError on observational datasets (best of base/calibrated, mean over 100 seeds; SE in parentheses). Best per column in \textbf{bold}. $\sigma_D$ is the cross-dataset standard deviation of the per-dataset ratio $\mathrm{CE}_{l,d}/\min_{l'} \mathrm{CE}_{l',d}$. Bottom row: mean across all learners per dataset. `--' indicates that the learner produces non-positive predictions on that dataset, making log-scale calibration error undefined.}
+\caption{CalError on observational datasets (best of base/calibrated, mean over 100 seeds; SE in parentheses). Best per column in \textbf{bold}. $R_{\max}$ is the worst-case per-dataset ratio $\mathrm{CE}_{l,d}/\min_{l'} \mathrm{CE}_{l',d}$ across datasets. Bottom row: mean across all learners per dataset.}
 \label{tab:cal-obs}
 \setlength{\tabcolsep}{3pt}
 \begin{tabular}{l | rrrrr | r r}
 \hline
-Learner & LaLonde & RHC & Cattaneo & NHEFS & JTPA & $\overline{\mathrm{CE}}$ & $\sigma_D$ \\
+Learner & LaLonde & RHC & Cattaneo & NHEFS & JTPA & $\overline{\mathrm{CE}}$ & $R_{\max}$ \\
 \hline
 S
- & \textbf{1.573} & -- & \textbf{2.156} & \textbf{1.853} & \textbf{1.191} & \textbf{1.693} & 0.000 \\
+ & \textbf{1.573} & -- & \textbf{2.156} & \textbf{1.853} & \textbf{1.191} & \textbf{1.693} & 1.000 \\
  & \scriptsize(0.019) & \scriptsize(--) & \scriptsize(0.042) & \scriptsize(0.034) & \scriptsize(0.005) & & \\[2pt]
 T
- & 1.648 & -- & 6.293 & 3.931 & 1.362 & 3.308 & 0.885 \\
+ & 1.648 & -- & 6.293 & 3.931 & 1.362 & 3.308 & 2.919 \\
  & \scriptsize(0.020) & \scriptsize(--) & \scriptsize(0.161) & \scriptsize(0.104) & \scriptsize(0.006) & & \\[2pt]
 Q
- & 1.818 & 1.776 & 3.769 & 4.203 & 1.417 & 2.597 & 0.457 \\
+ & 1.818 & 1.776 & 3.769 & 4.203 & 1.417 & 2.597 & 2.269 \\
  & \scriptsize(0.029) & \scriptsize(0.010) & \scriptsize(0.123) & \scriptsize(0.109) & \scriptsize(0.007) & & \\[2pt]
-X
- & 1.599 & -- & 4.746 & 3.176 & 1.278 & 2.700 & 0.564 \\
- & \scriptsize(0.020) & \scriptsize(--) & \scriptsize(0.142) & \scriptsize(0.081) & \scriptsize(0.005) & & \\[2pt]
 \hline
 DR-Q
- & 1.780 & 1.273 & 3.050 & 2.651 & 1.391 & 2.029 & 0.154 \\
+ & 1.780 & 1.273 & 3.050 & 2.651 & 1.391 & 2.029 & 1.431 \\
  & \scriptsize(0.022) & \scriptsize(0.012) & \scriptsize(0.075) & \scriptsize(0.050) & \scriptsize(0.007) & & \\[2pt]
 DR-Q log
- & 2.044 & 1.528 & 3.995 & 6.086 & 1.481 & 3.027 & 0.861 \\
+ & 2.044 & 1.528 & 3.995 & 6.086 & 1.481 & 3.027 & 3.285 \\
  & \scriptsize(0.035) & \scriptsize(0.013) & \scriptsize(0.118) & \scriptsize(0.182) & \scriptsize(0.006) & & \\[2pt]
 DR-T
- & 1.736 & 1.126 & 5.263 & 2.930 & 1.410 & 2.493 & 0.590 \\
+ & 1.736 & 1.126 & 5.263 & 2.930 & 1.410 & 2.493 & 2.441 \\
  & \scriptsize(0.023) & \scriptsize(0.006) & \scriptsize(0.149) & \scriptsize(0.065) & \scriptsize(0.007) & & \\[2pt]
 DR-T log
- & 2.089 & 1.239 & 5.757 & 7.092 & 1.492 & 3.534 & 1.183 \\
+ & 2.089 & 1.239 & 5.757 & 7.092 & 1.492 & 3.534 & 3.828 \\
  & \scriptsize(0.036) & \scriptsize(0.008) & \scriptsize(0.158) & \scriptsize(0.221) & \scriptsize(0.006) & & \\[2pt]
 DR-S
- & 1.764 & \textbf{1.126} & 2.708 & 2.303 & 1.389 & 1.858 & 0.104 \\
+ & 1.764 & \textbf{1.126} & 2.708 & 2.303 & 1.389 & 1.858 & 1.256 \\
  & \scriptsize(0.023) & \scriptsize(0.006) & \scriptsize(0.057) & \scriptsize(0.046) & \scriptsize(0.007) & & \\[2pt]
 DR-S log
- & 2.180 & 1.239 & 2.991 & 5.891 & 1.475 & 2.755 & 0.859 \\
+ & 2.180 & 1.239 & 2.991 & 5.891 & 1.475 & 2.755 & 3.180 \\
  & \scriptsize(0.040) & \scriptsize(0.008) & \scriptsize(0.071) & \scriptsize(0.143) & \scriptsize(0.007) & & \\
 \hline
-\textit{Dataset mean} & 1.823 & 1.330 & 4.073 & 4.012 & 1.389 & & \\
+\textit{Dataset mean} & 1.848 & 1.330 & 3.998 & 4.104 & 1.401 & & \\
 \hline
 \end{tabular}
 \end{table}
+
 
 
 \subsection{Recalibration}
@@ -1582,10 +1540,10 @@ S-Learner & 1.47$\times$ & 2.06$\times$ & $+$40\% \\
 T-Learner & 2.24$\times$ & 4.86$\times$ & $+$117\% \\
 Q-Learner & 2.12$\times$ & 3.67$\times$ & $+$73\% \\
 Q-Simple & 1.77$\times$ & 3.83$\times$ & $+$116\% \\
-X-Learner & 1.89$\times$ & 2.80$\times$ & $+$48\% \\
 \hline
 \end{tabular}
 \end{table}
+
 
 
 \section{Numerical Stability through Clipping}
