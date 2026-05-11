@@ -31,12 +31,15 @@ This repository implements the methods proposed in the paper:
 
 Empirical highlights from the paper:
 
-- On **seven RCT datasets**, no single learner dominates for ranking;
-  the S-Learner is the most consistently competitive, and its median
-  predictions are off by only `1.12x` after accounting for calibration.
-- On **five observational datasets**, DR-S log emerges as the clear
-  ranking winner, while DR-Q's conditional robustness proves
-  insufficient (negative Qini on RHC and NHEFS).
+- On **seven RCT datasets**, no single learner dominates for ranking,
+  but the **Q-Learner** is the most consistently competitive across
+  datasets, with the S-Learner a close second on the mean but less
+  stable. The S-Learner is the best-calibrated method.
+- On **five observational datasets**, **DR-S log** emerges as the
+  clear ranking winner, with DR-T log as a close second, confirming
+  the importance of classical double robustness combined with
+  log-scale variance stabilisation. DR-Q's conditional robustness
+  proves insufficient (negative Qini on RHC and NHEFS).
 
 ## Installation
 
