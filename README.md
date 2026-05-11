@@ -56,13 +56,13 @@ dataset loaders), [`lightgbm`](https://lightgbm.readthedocs.io/), and
 ## Repository structure
 
 ```
-learner.py           13 learner implementations (S/T/Q/X and DR-* variants)
+learner.py           12 learner implementations (S/T/Q and DR-* variants)
 calibration.py       Rank-preserving log-linear calibration
 metrics.py           Qini, uplift@k, calibration error
 datasets.py          Loaders for 12 benchmark datasets
 Benchmark.ipynb      End-to-end benchmark + figures + LaTeX table generation
 Benchmark.html       Rendered snapshot of the notebook
-benchmark_results.csv  33,000-row per-seed result table
+benchmark_results.csv  Per-seed result table (12 datasets × 12 learners × 100 seeds)
 benchmark_summary.csv  Aggregated summary metrics
 data/raw/            Locally-stored CSVs for datasets not covered by sklift
 data/processed/      Feather-cached per-seed outputs (regenerable; .gitignored)
@@ -78,40 +78,40 @@ from datasets import get_dataset
 from learner import get_learner
 from metrics import qini, calibration_error
 
-# Load a dataset
-X, W, Y, propensity = get_dataset('hillstrom_visit', random_state=42)
+# Load a dataset (returns an UpliftDataset with train/test splits)
+data = get_dataset('hillstrom_visit', random_state=42)
 
 # Instantiate and fit a Q-Learner
 learner = get_learner('q', random_state=42)
-learner.fit(X, W, Y, propensity=propensity)
+learner.fit(data.X_train, data.W_train, data.Y_train)
 
-# Predict ratio CATEs
-tau = learner.predict(X, propensity=propensity)
+# Predict ratio CATEs on the test set
+tau = learner.predict(data.X_test)
 
 # Evaluate
-print(f"Qini  = {qini(Y, W, tau):.3f}")
-print(f"CalEr = {calibration_error(Y, W, tau, n_bins=10):.3f}")
+print(f"Qini  = {qini(data.Y_test, data.W_test, tau):.3f}")
+print(f"CalEr = {calibration_error(data.Y_test, data.W_test, tau, n_bins=10):.3f}")
 ```
 
 Available learners (see `learner.ALL_LEARNER`):
-`s`, `t`, `q`, `q_simple`, `x`, `drs_log`, `drt_log`, `drq_log`,
+`s`, `t`, `q`, `q_simple`, `drs_log`, `drt_log`, `drq_log`,
 `drs_direct`, `drt_direct`, `drq_direct`, `drq_simple_log`,
 `drq_simple_direct`.
 
 ## Reproducing the paper
 
 Run `Benchmark.ipynb` top-to-bottom. On a workstation the full sweep
-(12 datasets × ~14 learners × 100 seeds) takes roughly 12 hours. The
+(12 datasets × 12 learners × 100 seeds) takes roughly 12 hours. The
 notebook is idempotent: on restart it resumes from
 `benchmark_results.csv` and only runs missing (dataset, learner, seed)
 combinations.
 
 After the sweep, the plotting cells regenerate
 
-- `fig_qini_gap.png` — mean Qini gap to best learner vs. cross-dataset
-  standard deviation (Figure 1 of the paper).
-- `fig_cal_gap.png` — same structure for calibration error (Figure 2 of
-  the paper).
+- `fig_qini_gap.png` — mean Qini ratio to best learner vs. worst-case
+  Qini ratio across datasets (Figure 1 of the paper).
+- `fig_cal_gap.png` — mean calibration-error ratio vs. worst-case
+  calibration-error ratio across datasets (Figure 2 of the paper).
 
 The final notebook cell emits the three LaTeX tables included in the
 paper's appendix (Qini on RCT, Qini on observational, calibration).
@@ -127,7 +127,7 @@ semi-synthetic.
 |--------------------|-----------------------------------------------|-------|
 | Hillstrom (Visit)  | [Hillstrom 2008][hillstrom]                   | email marketing |
 | Hillstrom (Conv.)  | [Hillstrom 2008][hillstrom]                   | same dataset, conversion outcome |
-| Criteo             | [Diemert et al. 2018][diemert]                | display advertising, sampled 10% |
+| Criteo             | [Diemert et al. 2018][diemert]                | display advertising |
 | MegaFon            | [MegaFon 2019][megafon]                       | telecom uplift challenge |
 | X5 Retail          | [X5 Retail 2020][x5]                          | retail personalisation challenge |
 | Lenta              | [Lenta 2021][lenta]                           | retail uplift, sampled 30% |
