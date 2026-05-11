@@ -463,10 +463,11 @@ means plugging in the design constant. The Q-Simple Learner is only
 applicable to experimental settings where $e(x)$ is known by design.
 
 Section~\ref{sec:experiments} confirms that Q-Learner outperforms
-Q-Simple on average ($+0.015$ mean Qini), though the advantage is
-concentrated on a single dataset (Lenta: $+0.087$); on the remaining six
-RCTs the difference is negligible ($+0.003$). For large datasets where
-computational efficiency matters, Q-Simple remains a competitive choice.
+Q-Simple on average ($+0.027$ mean Qini). The advantage is
+concentrated on two datasets (Lenta: $+0.087$, Criteo: $+0.108$); on
+the remaining five RCTs the difference is negligible (within $0.01$
+Qini). For applications where computational efficiency matters,
+Q-Simple remains a competitive choice on most RCTs.
 
 
 %==============================================================================
@@ -917,9 +918,8 @@ highest worst-case ratio ($R_{\min}^Q = 0.40$). The S-Learner is a
 close second on the mean ($0.75$) but markedly less stable, with a
 worst-case ratio of $0.30$ on Lenta.
 
-The broader pattern on RCT data is that \textbf{plug-in learners are
-more consistently competitive than their doubly robust counterparts}:
-the top two positions by mean Qini ratio are held by plug-ins
+The broader pattern on RCT data is that \textbf{plug-in learners
+suffice}: the top two positions by mean Qini ratio are held by plug-ins
 (Q: $0.77$, S: $0.75$), while the best DR variant (DR-Q-Simple)
 reaches $0.67$ and every other DR variant falls below $0.63$. On the
 four RCTs where a DR variant is the outright winner (H(Vis), H(Conv),
