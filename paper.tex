@@ -1,46 +1,24 @@
-\documentclass[11pt,a4paper]{article}
+\documentclass{article}
 
-% ============================================
-% PACKAGES
-% ============================================
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage[english]{babel}
-\usepackage{amsmath,amssymb,amsthm}
-\usepackage{parskip}
-\usepackage{mathtools}
+\usepackage{arxiv}
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+%\usepackage{hyperref}       % hyperlinks
+\usepackage[hypertexnames=false]{hyperref}
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{amsmath}
 \usepackage{graphicx}
-\usepackage{booktabs}
-\usepackage{multirow}
-\usepackage[hidelinks]{hyperref}
-\usepackage{xcolor}
-\usepackage{enumitem}
-\usepackage[margin=2.5cm]{geometry}
-\usepackage{microtype}
-\usepackage{caption}
 \usepackage{natbib}
-\usepackage{tcolorbox}
-\usepackage{tikz}
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.18}
-\usetikzlibrary{shapes,arrows,positioning}
 \usepackage{float}
-\usepackage{url}
+\usepackage{doi}
 
-\usepackage{algorithm}
-\usepackage{algorithmic}
-
-% ============================================
-% THEOREM ENVIRONMENTS
-% ============================================
-\newtheorem{theorem}{Theorem}
-\newtheorem{lemma}[theorem]{Lemma}
-\newtheorem{proposition}[theorem]{Proposition}
-\newtheorem{corollary}[theorem]{Corollary}
 \newtheorem{assumption}{Assumption}
-\newtheorem{definition}{Definition}
 \newtheorem{remark}{Remark}
-
 % ============================================
 % CUSTOM COMMANDS
 % ============================================
@@ -53,33 +31,62 @@
 \newcommand{\tauD}{\tau^{\text{diff}}}
 
 
+\title{Beyond Differences: Doubly Robust Meta-Learners\\for Ratio-Based Treatment Effects%
+\footnote{Code, data, and scripts to reproduce the experiments are available at \url{https://github.com/michaelfuchs90/ratiobasedcate}.}}
 
-% ============================================
-% TITLE
-% ============================================
-\title{
-  \vspace{-1cm}
-  Beyond Differences: Doubly Robust Meta-Learners\\for Ratio-Based Treatment Effects%
-  \footnote{Code, data, and scripts to reproduce the experiments are available at \url{https://github.com/michaelfuchs90/ratiobasedcate}.
-  }
+% Here you can change the date presented in the paper title
+%\date{September 9, 1985}
+% Or remove it
+%\date{}
+
+\newif\ifuniqueAffiliation
+% Comment to use multiple affiliations variant of author block 
+\uniqueAffiliationtrue
+
+\ifuniqueAffiliation % Standard variant of author block
+\author{ Michael Fuchs\thanks{Corresponding author.} \\
+	Munich, Germany \\
+	\texttt{michael.fuchs@outlook.de} \\
+	\And
+	Dominik Krei\ss{} \\
+	% AUTHOR-TODO: fill in Dominik's affiliation and email \\
+	\\
+}
+\else
+% Multiple affiliations variant of author block
+\usepackage{authblk}
+\renewcommand\Authfont{\bfseries}
+\setlength{\affilsep}{0em}
+% box is needed for correct spacing with authblk
+\newbox{\orcid}\sbox{\orcid}{\includegraphics[scale=0.06]{orcid.pdf}} 
+\author[1]{%
+	\href{https://orcid.org/0000-0000-0000-0000}{\usebox{\orcid}\hspace{1mm}David S.~Hippocampus\thanks{\texttt{hippo@cs.cranberry-lemon.edu}}}%
+}
+\author[1,2]{%
+	\href{https://orcid.org/0000-0000-0000-0000}{\usebox{\orcid}\hspace{1mm}Elias D.~Striatum\thanks{\texttt{stariate@ee.mount-sheikh.edu}}}%
+}
+\affil[1]{Department of Computer Science, Cranberry-Lemon University, Pittsburgh, PA 15213}
+\affil[2]{Department of Electrical Engineering, Mount-Sheikh University, Santa Narimana, Levand}
+\fi
+
+% Uncomment to override  the `A preprint' in the header
+%\renewcommand{\headeright}{Technical Report}
+%\renewcommand{\undertitle}{Technical Report}
+\renewcommand{\shorttitle}{Doubly Robust Meta-Learners for Ratio-Based Treatment Effects}
+
+
+\hypersetup{
+pdftitle={Beyond Differences: Doubly Robust Meta-Learners for Ratio-Based Treatment Effects},
+pdfsubject={stat.ML, stat.ME},
+pdfauthor={Michael Fuchs, Dominik Krei{\ss}},
+pdfkeywords={Conditional Average Treatment Effect, Ratio-based CATE, Meta-Learner, Doubly Robust Estimation, Heterogeneous Treatment Effects, Uplift Modeling},
 }
 
-\author{
-  Michael Fuchs \\
-  \small Munich, Germany \\
-  \small \texttt{michael.fuchs@outlook.de}
-}
-
-\date{\today}
-
-% ============================================
-% DOCUMENT
-% ============================================
 \begin{document}
-
 \maketitle
+
 \begin{abstract}
-When treatment effects are naturally expressed as ratios --- as in
+	When treatment effects are naturally expressed as ratios --- as in
 medicine, pricing, and marketing --- the ratio-based CATE
 $\tau(x) = \mathbb{E}[Y|W{=}1,X{=}x] / \mathbb{E}[Y|W{=}0,X{=}x]$ is
 the appropriate estimand. Yet existing estimators either impose
@@ -100,6 +107,11 @@ be ruled out, the DR learners introduced here always come out on top,
 making them practitioners' natural default for confounded
 observational data.
 \end{abstract}
+
+
+% keywords can be removed
+\keywords{Conditional Average Treatment Effect \and Ratio-based CATE \and Meta-Learner \and Doubly Robust Estimation \and Heterogeneous Treatment Effects \and Uplift Modeling}
+
 
 \section{Introduction}
 \label{sec:introduction}
@@ -328,7 +340,7 @@ estimates; we address this through clipping (Appendix~\ref{app:clipping}).
 
 Beyond these standard quantities, the Q-Learner
 (Section~\ref{sec:q-learner}) relies on two additional objects:
-\begin{itemize}[leftmargin=2em]
+\begin{itemize}
     \item The \textbf{converter propensity}
     $p(x) = P(W{=}1 \mid Y{=}1, X{=}x)$: the probability of having been
     treated, conditional on a positive outcome.
@@ -375,7 +387,7 @@ $\frac{p(x)/(1-p(x))}{e(x)/(1-e(x))}$ quantifies exactly this excess on
 the odds scale.
 
 The Q-Learner identity suggests a simple estimation strategy:
-\begin{enumerate}[leftmargin=2em]
+\begin{enumerate}
 \item \textbf{Step 1:} Estimate propensity score $\hat{e}(x)$ from the
 observed treatment assignments using all observations
 (Section~\ref{sec:q-simple} explains why estimation is preferred even
@@ -390,7 +402,7 @@ $\hat{\tau}(x) = \frac{\hat{p}(x)}{1-\hat{p}(x)} \cdot
 
 
 Compared to S- and T-Learners, the Q-Learner offers three structural advantages:
-\begin{itemize}[leftmargin=1em]
+\begin{itemize}
     \item \textbf{Direct optimization of $\tau$}: Since $\hat{\tau}(x)$
     is a deterministic function of $\hat{p}(x)$ and $\hat{e}(x)$,
     hyperparameter tuning of the component models directly improves the
@@ -547,7 +559,7 @@ in $\hat{\mu}_0$, both weighted by the inverse propensity.
 
 The DR-S/T estimator achieves \emph{classical double robustness}: it is
 consistent for $\tau(x)$ if either
-\begin{enumerate}[leftmargin=2em]
+\begin{enumerate}
     \item[(a)] the propensity model is correct: $\hat{e}(x) = e(x)$, or
     \item[(b)] the outcome models are correct: $\hat{\mu}_0(x) = \mu_0(x)$
     and $\hat{\mu}_1(x) = \mu_1(x)$.
@@ -644,7 +656,7 @@ Unlike DR-S/T, the DR-Q estimator does \emph{not} achieve classical double robus
 
 
 Concretely, the DR-Q estimator requires \emph{exact} specification of the propensity score $e(x)$. Given $\hat{e}(x) = e(x)$ \textbf{exactly}, the estimator is consistent for $\tau(x)$ if either:
-\begin{enumerate}[leftmargin=2em]
+\begin{enumerate}
     \item[(a)] the marginal conversion model is correct: $\hat{m}(x) = m(x)$, or
     \item[(b)] the converter propensity model is correct: $\hat{p}(x) = p(x)$
 \end{enumerate}
@@ -1182,8 +1194,16 @@ work.
 %==============================================================================
 % REFERENCES
 %==============================================================================
-\bibliographystyle{plainnat}
-\begin{thebibliography}{99}
+
+
+
+
+
+
+\begin{thebibliography}{1}
+
+
+
 
 \bibitem[Abadie et~al.(2002)]{abadie2002}
 Abadie, A., Angrist, J., and Imbens, G. (2002).
@@ -1601,7 +1621,7 @@ Q-Simple & 1.75$\times$ & 3.78$\times$ & $+$115\% \\
 \section{Numerical Stability through Clipping}
 \label{app:clipping}
 For numerical stability, we recommend the following clipping bounds as good starting points:
-\begin{itemize}[leftmargin=1em]
+\begin{itemize}
     \item \textbf{Propensity scores}: Clip $\hat{e}(x)$ to $[\epsilon_e, 1-\epsilon_e]$ with $\epsilon_e = 0.01$
     \item \textbf{Outcome probabilities}: Clip $\hat{\mu}_w(x)$ to $[\epsilon_\mu, 1-\epsilon_\mu]$ with $\epsilon_\mu = 0.001$
     \item \textbf{Marginal conversion}: Clip $\hat{m}(x)$ to $[\epsilon_m, 1]$ with $\epsilon_m = 0.001$
@@ -1614,6 +1634,12 @@ While these can serve as a good starting point, in practice we recommend treatin
 
 
 
+
+
+
+
+
+
+
+
 \end{document}
-
-
