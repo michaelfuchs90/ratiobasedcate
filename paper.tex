@@ -32,46 +32,22 @@
 
 
 \title{Beyond Differences: Doubly Robust Meta-Learners\\for Ratio-Based Treatment Effects%
-\footnote{Code, data, and scripts to reproduce the experiments are available at \url{https://github.com/michaelfuchs90/ratiobasedcate}.}}
+\thanks{Code, data, and scripts to reproduce the experiments are available at \url{https://github.com/michaelfuchs90/ratiobasedcate}.}}
 
 % Here you can change the date presented in the paper title
 %\date{September 9, 1985}
 % Or remove it
-%\date{}
-
-\newif\ifuniqueAffiliation
-% Comment to use multiple affiliations variant of author block 
-\uniqueAffiliationtrue
-
-\ifuniqueAffiliation % Standard variant of author block
-\author{ Michael Fuchs\thanks{Corresponding author.} \\
-	Munich, Germany \\
-	\texttt{michael.fuchs@outlook.de} \\
-	\And
-	Dominik Krei\ss{} \\
-	% AUTHOR-TODO: fill in Dominik's affiliation and email \\
-	\\
+\date{}
+\author{
+  Michael Fuchs\thanks{Corresponding author.} \\
+  Munich, Germany \\
+  \texttt{michael.fuchs@outlook.de} \\
+  \And
+  Dominik Krei\ss{} \\
+  % TODO: fill in Dominik's affiliation and email
 }
-\else
-% Multiple affiliations variant of author block
-\usepackage{authblk}
-\renewcommand\Authfont{\bfseries}
-\setlength{\affilsep}{0em}
-% box is needed for correct spacing with authblk
-\newbox{\orcid}\sbox{\orcid}{\includegraphics[scale=0.06]{orcid.pdf}} 
-\author[1]{%
-	\href{https://orcid.org/0000-0000-0000-0000}{\usebox{\orcid}\hspace{1mm}David S.~Hippocampus\thanks{\texttt{hippo@cs.cranberry-lemon.edu}}}%
-}
-\author[1,2]{%
-	\href{https://orcid.org/0000-0000-0000-0000}{\usebox{\orcid}\hspace{1mm}Elias D.~Striatum\thanks{\texttt{stariate@ee.mount-sheikh.edu}}}%
-}
-\affil[1]{Department of Computer Science, Cranberry-Lemon University, Pittsburgh, PA 15213}
-\affil[2]{Department of Electrical Engineering, Mount-Sheikh University, Santa Narimana, Levand}
-\fi
 
-% Uncomment to override  the `A preprint' in the header
-%\renewcommand{\headeright}{Technical Report}
-%\renewcommand{\undertitle}{Technical Report}
+
 \renewcommand{\shorttitle}{Doubly Robust Meta-Learners for Ratio-Based Treatment Effects}
 
 
@@ -1186,10 +1162,8 @@ generates all figures and tables, and a README with replication
 instructions.
 
 \paragraph{Acknowledgements.}
-I thank Dominik Krei\ss{}, Marco Breitig, and Kristina Weidner for
-valuable comments on earlier drafts. I am especially grateful to
-Dominik Krei\ss{} for discussions that motivated key parts of this
-work.
+We thank Marco Breitig, and Kristina Weidner for
+valuable comments on earlier drafts. 
 
 %==============================================================================
 % REFERENCES
