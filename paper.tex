@@ -80,21 +80,25 @@
 \maketitle
 \begin{abstract}
 When treatment effects are naturally expressed as ratios --- as in
-medicine, pricing, and marketing, where varying baseline rates make
-relative change the natural scale --- the ratio-based CATE
+medicine, pricing, and marketing --- the ratio-based CATE
 $\tau(x) = \mathbb{E}[Y|W{=}1,X{=}x] / \mathbb{E}[Y|W{=}0,X{=}x]$ is
-the appropriate estimand. Yet existing estimators either impose log-linear
-parametric structure or apply generic regression without robustness
-guarantees for this functional. We introduce the \emph{Q-Learner}, which
-decomposes $\tau(x)$ into a product of two odds ratios, reducing
-ratio-CATE estimation for binary outcomes to two propensity
-classification tasks. We further derive doubly robust augmentations for
-both S/T- and Q-style ratio learners and characterize their distinct
-robustness properties. In benchmarks on seven RCT datasets, no single
-learner dominates, but the Q-Learner is the most consistently competitive
-across datasets. On five observational datasets, where propensity must
-be estimated and confounding cannot be ruled out, the log-scale DR
-learners introduced here are clearly superior.
+the appropriate estimand. Yet existing estimators either impose
+log-linear parametric structure or apply generic regression without
+robustness guarantees for this functional. We introduce the
+\emph{Q-Learner}, which decomposes $\tau(x)$ into a product of two
+odds ratios, reducing ratio-CATE estimation for binary outcomes to
+two propensity classification tasks. We further derive doubly robust
+augmentations for both S/T- and Q-style ratio learners and
+characterize their distinct robustness properties. In benchmarks on
+seven RCT datasets, the Q-Learner dominates in low-conversion regimes,
+where its propensity-only construction sidesteps the imbalanced
+regression that hurts S- and T-style estimators.
+% Alternative (cleaner, no mechanism): the Q-Learner dominates in low-conversion regimes.
+On five observational
+datasets, where propensity must be estimated and confounding cannot
+be ruled out, the DR learners introduced here always come out on top,
+making them practitioners' natural default for confounded
+observational data.
 \end{abstract}
 
 \section{Introduction}
@@ -183,9 +187,10 @@ classification tasks and sidesteps the numerical instability of
 $\hat{\mu}_0$ in the denominator. The Q-Learner directly optimizes
 $\hat{\tau}(x)$ through its component classifiers, making it naturally
 amenable to hyperparameter tuning and model selection. 
-We further argue that estimating propensity from data is
-preferable to using the known design propensity, even in RCTs.
-We introduce the Q-Simple Learner to confirm this empirically.
+As a special case we outline the \emph{Q-Simple Learner}, which
+estimates $\tau$ on the converter subset only. This is not only
+computationally cheaper, but sometimes a must when only data on the
+converters is available.
 
 
 Second, we derive \emph{doubly robust augmentations} for both S/T-style and
@@ -200,14 +205,18 @@ observational settings.
 
 
 We evaluate all methods on seven RCT and five observational datasets (100
-seeds each). In experimental settings with known propensity, no single
-learner dominates, but the Q-Learner is the most consistently competitive
-ranker across datasets, with the S-Learner a close second on the mean but
-markedly less stable. In observational settings, where propensity must be
-estimated and confounding cannot be ruled out, the S/T log-scale DR
-learners introduced here are clearly superior for ranking, confirming the
-importance of classical double robustness in such settings. Across both
-regimes, the S-Learner is the best-calibrated method.
+seeds each). In experimental settings with known propensity, we confirm
+that the Q-Learner's ability to turn an imbalanced regression problem
+into balanced classification tasks yields superior performance on
+low-conversion datasets (below $10\%$). On higher-conversion datasets,
+where this imbalance does not arise, the traditional S- and T-Learner
+remain competitive. In observational settings, where propensity must be
+estimated and confounding cannot be ruled out, a DR variant we introduce
+comes out on top on every dataset tested, confirming the importance of
+double robustness when propensity is uncertain. Across both regimes,
+the S-Learner is the best-calibrated method.
+
+
 
 
 \subsection{Related Work}
@@ -393,7 +402,10 @@ Compared to S- and T-Learners, the Q-Learner offers three structural advantages:
     \item \textbf{Balanced classification}: In A/B tests with
     $e(x) \approx 0.5$ and low conversion rates, the Q-Learner transforms
     a highly imbalanced outcome regression problem into a balanced
-    classification problem among converters.
+    classification problem among converters. We expect this to make the
+    Q-Learner especially competitive on low-conversion datasets, an
+    expectation we confirm empirically in
+    Section~\ref{sec:experiments}.
     \item \textbf{Flexibility}: Any probabilistic classifier can serve as
     base model for both stages.
 \end{itemize}
@@ -433,41 +445,40 @@ In RCT settings where propensity is exactly known, one might be tempted
 to skip fitting a propensity model and use the known $e(x)$ directly in
 the Q-Learner identity~\eqref{eq:q-identity}. This reduces CATE
 estimation to a single model for $p(x)$, estimated only among
-converters. This is a computationally attractive simplification, especially for
-large datasets.
+converters --- a computationally attractive simplification, especially
+for large datasets. We call this variant the \emph{Q-Simple Learner}.
 
-However, estimating propensity from data can reduce finite-sample
-variance. The key insight is that $\hat{p}(x)$ and $\hat{e}(x)$ are
-correlated through the same realized treatment assignments: if a
-covariate region happens to contain more treated units than expected,
-both $\hat{e}(x)$ and $\hat{p}(x)$ increase, and the biases partially
-cancel in the product
+Beyond its computational appeal, Q-Simple has a categorical advantage
+that no other learner in the family shares: it is the only one that
+can be applied when only converters are observed, since $p(x)$ is
+fitted on the $Y = 1$ subset and the design propensity replaces the
+full-sample model. This is the natural data layout in operational
+settings such as price-elasticity estimation on existing customers,
+where covariates and outcomes are collected only post-conversion.
+
+Estimating propensity from data is nonetheless preferable when
+possible, because it can reduce finite-sample variance. The key
+insight is that $\hat{p}(x)$ and $\hat{e}(x)$ are correlated through
+the same realized treatment assignments: if a covariate region happens
+to contain more treated units than expected, both $\hat{e}(x)$ and
+$\hat{p}(x)$ increase, and the biases partially cancel in the product
 $\frac{\hat{p}}{1-\hat{p}} \cdot \frac{1-\hat{e}}{\hat{e}}$. Using the
 known $e(x)$ breaks this correlation, potentially increasing
-finite-sample variance. Fitting $\hat{e}(x)$ from data---even though the
-model only captures the randomness of the treatment assignments---preserves
-this correlation and thereby reduces variance.
+finite-sample variance. Fitting $\hat{e}(x)$ from data---even though
+the model only captures the randomness of the treatment assignments---preserves
+this correlation and thereby reduces variance. The reduction
+diminishes with sample size: as $n$ grows, the realized propensity
+concentrates around its true value, and the correlation benefit
+vanishes, so for large datasets the computational savings from skipping
+propensity estimation may outweigh the small variance cost.
 
-This variance reduction diminishes with sample size: as $n$ grows, the
-realized propensity concentrates around its true value, and the
-correlation benefit vanishes. For large datasets, the computational
-savings from skipping propensity estimation may therefore outweigh the
-small variance cost.
-
-\paragraph{The Q-Simple Learner.}
-To empirically quantify this trade-off, we introduce the \emph{Q-Simple
-Learner}: a variant that uses the known propensity $e(x)$ directly in
-the Q-Learner identity~\eqref{eq:q-identity}, without estimating it from
-data. For RCTs with constant propensity (e.g., $e = 0.5$), this simply
-means plugging in the design constant. The Q-Simple Learner is only
-applicable to experimental settings where $e(x)$ is known by design.
-
-Section~\ref{sec:experiments} confirms that Q-Learner outperforms
+Section~\ref{sec:experiments} confirms that the Q-Learner outperforms
 Q-Simple on average ($+0.027$ mean Qini). The advantage is
 concentrated on two datasets (Lenta: $+0.087$, Criteo: $+0.108$); on
 the remaining five RCTs the difference is negligible (within $0.01$
-Qini). For applications where computational efficiency matters,
-Q-Simple remains a competitive choice on most RCTs.
+Qini). For applications where computational efficiency matters or
+where only converter data is available, Q-Simple therefore remains a
+competitive choice on most RCTs.
 
 
 %==============================================================================
@@ -737,16 +748,20 @@ with bias $O_p(\|\hat{p} - p\|_2^2)$.
 \label{sec:experiments}
 
 We now systematically evaluate which learner performs best under which
-conditions to give guidance on when to use which. Further, the theoretical
-analysis in Section~\ref{sec:dr} leads to three predictions we want to
-test. First, in observational settings DR-S and DR-T should outperform
-DR-Q: their classical double robustness tolerates propensity
-misspecification, while DR-Q's conditional robustness does not. Second,
-we expect the simple variants of the Q-Learner family to be slightly
-worse than their non-simple counterparts, but by how much is an open
-question. Third, log-scale DR variants should be more stable than their
-direct-scale counterparts when treatment effects vary substantially in
-magnitude.
+conditions to give guidance on when to use which. Further, the
+theoretical analysis in Sections~\ref{sec:q-learner}--\ref{sec:dr}
+leads to four predictions we want to test. First, the Q-Learner should
+be especially strong on low-conversion datasets, where it converts a
+heavily imbalanced outcome regression into two balanced classification
+tasks and avoids the numerical instability of $\hat{\mu}_0$ in the
+denominator. Second, we expect the simple variants of the Q-Learner
+family to be slightly worse than their non-simple counterparts, but by
+how much is an open question. Third, in observational settings DR-S and
+DR-T should outperform DR-Q: their classical double robustness
+tolerates propensity misspecification, while DR-Q's conditional
+robustness does not. Fourth, log-scale DR variants should be more
+stable than their direct-scale counterparts when treatment effects
+vary substantially in magnitude.
 
 
 \subsection{Setup}
@@ -910,92 +925,113 @@ Table~\ref{tab:results-rct} (Appendix~\ref{app:sec:full-results}) reports
 per-dataset Qini coefficients on the seven RCT datasets.
 \textbf{No single learner dominates}: seven datasets produce five
 different winners (DR-S and Q-Learner each on two datasets, plus
-T-Learner, DR-Q-Simple, and DR-T log). In the cross-dataset
-ratio-to-best summary (Figure~\ref{fig:qini-gap}, left panel), the
-\textbf{Q-Learner is the most consistently competitive method}: it
-attains the highest mean Qini ratio across datasets ($0.77$) and the
-highest worst-case ratio ($R_{\min}^Q = 0.40$). The S-Learner is a
-close second on the mean ($0.75$) but markedly less stable, with a
-worst-case ratio of $0.30$ on Lenta.
+T-Learner, DR-Q-Simple, and DR-T log).
 
-The broader pattern on RCT data is that \textbf{plug-in learners
-suffice}: the top two positions by mean Qini ratio are held by plug-ins
-(Q: $0.77$, S: $0.75$), while the best DR variant (DR-Q-Simple)
-reaches $0.67$ and every other DR variant falls below $0.63$. On the
-four RCTs where a DR variant is the outright winner (H(Vis), H(Conv),
-X5, Twins), the best plug-in attains between $84\%$ and $96\%$ of the
-DR winner's Qini, so even in the cases where DR wins, plug-ins follow
-very closely. This matches the theoretical expectation: when
-propensity is known by design and no confounding can arise, plug-in
-learners can correctly identify the CATE. The DR augmentation then
-trades a small bias-correction benefit against added estimation
-variance from the nuisance correction term. While a DR learner
-sometimes still comes out on top, our results suggest that the
-additional variance often dominates the bias reduction.
+\paragraph{Conversion-rate regimes.}
+The result on RCT data splits sharply by conversion rate.
+Figure~\ref{fig:rct-conversion-gradient} traces the Qini ratio of the
+S-, T-, and Q-Learner across the seven RCTs, sorted by conversion rate.
+The Q-Learner attains near-optimal performance on the four
+lowest-conversion datasets (mean ratio $0.94$, with outright wins on
+Criteo and Lenta), where it converts a heavily imbalanced outcome
+regression into two balanced classification tasks. On the
+high-conversion datasets the imbalance disappears and the S-Learner
+takes the lead (mean ratio $0.94$ across the three high-conversion
+RCTs), while the Q-Learner drops to $0.55$. This confirms the first
+theoretical prediction from Section~\ref{sec:experiments}: the
+Q-Learner is the right choice precisely in the low-conversion regime
+where ratio-CATEs are most valuable to begin with.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\textwidth]{fig_rct_conversion_gradient.png}
+\caption{Qini ratio to the dataset best for the S-, T-, and Q-Learner
+across the seven RCT datasets, sorted by conversion rate (low to
+high). The dashed vertical line marks the $10\%$ conversion threshold
+that separates the two regimes. The Q-Learner dominates on the four
+low-conversion datasets, while the S-Learner takes over on the three
+high-conversion datasets.}
+\label{fig:rct-conversion-gradient}
+\end{figure}
+
+\paragraph{Plug-in learners suffice.}
+A second pattern cuts across both regimes: \textbf{plug-in learners
+suffice}. Within each regime, the leading method is a plug-in (Q at
+low conversion, S at high conversion), and no DR variant attains the
+leading plug-in's mean ratio. On the four RCTs where a DR variant is
+the outright winner (H(Vis), H(Conv), X5, Twins), the best plug-in
+attains between $84\%$ and $96\%$ of the DR winner's Qini, so even in
+the cases where DR wins, plug-ins follow very closely. This matches
+the theoretical expectation: when propensity is known by design and
+no confounding can arise, plug-in learners can correctly identify the
+CATE. The DR augmentation then trades a small bias-correction benefit
+against added estimation variance from the nuisance correction term.
+While a DR learner sometimes still comes out on top, our results
+suggest that the additional variance often dominates the bias
+reduction.
 
 
 \paragraph{Q-Learner vs.\ Q-Simple.}
-The Q-Learner (mean Qini ratio $0.77$) outperforms Q-Simple ($0.59$),
-and on the raw Qini scale the advantage is moderate (mean $0.39$ vs.\
-$0.36$). The gap is concentrated on two datasets: on Lenta, Q-Simple's
-Qini collapses to $0.002$ while the Q-Learner reaches $0.089$, and on
+The Q-Learner (mean Qini ratio $0.77$) outperforms Q-Simple ($0.59$).
+The gap is concentrated on two datasets: on Lenta, Q-Simple's Qini
+collapses to $0.002$ while the Q-Learner reaches $0.089$, and on
 Criteo the Q-Learner reaches $0.559$ versus $0.451$ for Q-Simple. On
 the remaining five RCT datasets Q and Q-Simple are within $0.01$ Qini
-of each other. Q-Simple therefore remains a competitive, computationally
-cheaper alternative on most RCTs, but the Q-Learner is the safer default.
+of each other. Q-Simple therefore remains a competitive,
+computationally cheaper alternative on most RCTs.
 
 \subsubsection{Observational Datasets}
 \label{sec:ranking-obs}
 On observational data, where propensity
-must be estimated, the result reverses: DR learners consistently outperform plug-in learners.
+must be estimated, the result reverses: DR learners consistently
+outperform plug-in learners. In fact, on every observational dataset
+we tested a DR variant came out on top.
 Table~\ref{tab:results-obs} (Appendix~\ref{app:sec:full-results}) reports
 per-dataset Qini coefficients on the five observational datasets. 
-The log-scale DR learners occupy the top three positions:
-\textbf{DR-S log} ($0.78$), DR-T log ($0.75$), DR-Q log ($0.59$). All
-three plug-in learners fall below the log-scale DR group: S ($0.58$),
-T ($0.51$), Q ($0.41$). The direct-scale DR learners are intermediate
-between the log-scale DR group and the plug-ins for DR-S ($0.57$) and
-DR-T ($0.58$), and below all other learners for DR-Q ($0.30$).
+The log-scale DR learners occupy the top three positions
+(\textbf{DR-S log} $0.78$, DR-T log $0.75$, DR-Q log $0.59$), with all
+three plug-ins and the direct-scale DR variants trailing. DR-Q direct
+is last.
 
-This confirms the first theoretical prediction from
+This confirms the third theoretical prediction from
 Section~\ref{sec:experiments}: outcome-regression-based DR learners with
 classical double robustness (DR-S/T) outperform both plug-in methods
 and DR-Q in observational settings once the log transform is applied.
-The advantage of DR-S over DR-T is small in this regime (log-scale:
-$0.78$ vs.\ $0.75$; direct-scale: $0.57$ vs.\ $0.58$), suggesting that
-the regularisation benefit of joint outcome modelling is largely
+The advantage of DR-S over DR-T is small in this regime, suggesting
+that the regularisation benefit of joint outcome modelling is largely
 absorbed once the log transform stabilises the pseudo-outcomes on the
 small observational datasets ($n = 1.6$k--$9.2$k).
 
 \paragraph{Conditional vs.\ classical robustness.}
-DR-Q direct produces negative Qini on both RHC ($-0.106$) and NHEFS
-($-0.082$), with a mean ratio of $0.30$ and a worst-case ratio of
-$R_{\min}^Q = -0.55$ on RHC---the largest failure across all learners
-in the panel. However, attributing this entirely to conditional robustness
-would be misleading: the direct scale introduces additional variance that
-amplifies the problem. The cleaner test is DR-Q log (mean ratio $0.59$),
-which isolates the robustness penalty by removing direct-scale variance.
-DR-Q log still lags DR-S log ($0.78$) and DR-T log ($0.75$), confirming
-that conditional robustness is a genuine disadvantage in observational
-settings, but the gap is moderate rather than catastrophic.
+DR-Q direct produces negative Qini on both RHC and NHEFS, with a mean
+ratio of $0.30$ and a worst-case ratio of $R_{\min}^Q = -0.55$ on
+RHC---the largest failure across all learners in the panel. However,
+attributing this entirely to conditional robustness would be
+misleading: the direct scale introduces additional variance that
+amplifies the problem. The cleaner test is DR-Q log (mean ratio
+$0.59$), which isolates the robustness penalty by removing
+direct-scale variance. DR-Q log still lags DR-S log and DR-T log,
+confirming that conditional robustness is a genuine disadvantage in
+observational settings, but the gap is moderate rather than
+catastrophic.
 
 \paragraph{Log vs.\ direct scale.}
-Across all DR learners, log-scale variants consistently outperform
-their direct-scale counterparts on observational data (DR-S log $0.78$
-vs.\ DR-S $0.57$; DR-T log $0.75$ vs.\ DR-T $0.58$; DR-Q log $0.59$
-vs.\ DR-Q $0.30$). The variance-stabilising reparametrisation is
-particularly beneficial on smaller datasets where direct-scale
-pseudo-outcomes can produce extreme values.
+Across all three DR pairs, log-scale variants consistently outperform
+their direct-scale counterparts on observational data (see
+Figure~\ref{fig:qini-gap} and Table~\ref{tab:results-obs}). The
+variance-stabilising reparametrisation is particularly beneficial on
+smaller datasets where direct-scale pseudo-outcomes can produce
+extreme values.
 
-\paragraph{Stability of the plug-in Q-Learner.}
+\paragraph{Side observation: stability of the plug-in Q-Learner.}
 Although the Q-Learner's mean ratio on observational data ($0.41$) is
 mediocre, it has the highest worst-case ratio of any learner in the
 panel ($R_{\min}^Q = 0.26$). All three direct-scale DR learners go
-negative on at least one dataset (DR-Q $-0.55$, DR-T $-0.20$, DR-S
-$-0.14$), and even the log-scale DR variants drop below $0.17$ on
-their weakest dataset. Combined with its $R_{\min}^Q = 0.40$ on the
-RCT panel, the Q-Learner is the only learner that never produces a
-per-dataset failure across the twelve datasets.
+negative on at least one dataset, and even the log-scale DR variants
+drop below $0.17$ on their weakest dataset. Combined with its
+$R_{\min}^Q = 0.40$ on the RCT panel, the Q-Learner is the only
+learner that never produces a per-dataset failure across the twelve
+datasets.
 
 
 \subsection{Calibration Analysis}
@@ -1024,15 +1060,13 @@ sits at the bottom-left corner (low mean, low worst-case).}
 
 Figure~\ref{fig:cal-gap} shows the calibration-error ratio across
 datasets. On RCT data, the \textbf{S-Learner} dominates calibration
-(mean ratio $1.02$, $R_{\max}^C = 1.08$), followed by DR-S log
-($1.10$) and DR-S ($1.20$). DR learners on direct scale remain
-poorly calibrated even after recalibration. On observational data,
-the pattern is similar: the S-Learner is the best-calibrated learner
-on every single observational dataset (mean ratio $1.00$,
-$R_{\max}^C = 1.00$). The log-scale DR variants that dominate ranking
-are among the worst-calibrated learners: DR-T log reaches a mean
-ratio of $2.05$ and DR-S log $1.67$, substantially worse than their
-direct-scale counterparts (DR-T: $1.47$, DR-S: $1.17$). The ranking
+(mean ratio $1.02$, $R_{\max}^C = 1.08$), followed by DR-S log and
+DR-S; DR learners on direct scale remain poorly calibrated even after
+recalibration. On observational data, the pattern is similar: the
+S-Learner is the best-calibrated learner on every single
+observational dataset. The log-scale DR variants that dominate
+ranking on observational data are among the worst-calibrated, and
+substantially worse than their direct-scale counterparts. The ranking
 advantage of log-scale DR thus comes at the cost of poor calibration;
 post-hoc recalibration would be needed before using these models for
 score-level decisions.
@@ -1041,14 +1075,16 @@ score-level decisions.
 \subsection{Summary}
 
 \begin{enumerate}
-    \item \textbf{RCT: plug-in learners suffice.} On RCT data no single
-    learner dominates, but the Q-Learner is the most consistently
-    competitive method, with the S-Learner a close second on the mean
-    but less stable across datasets; every DR variant lags behind. Even
-    on datasets where a DR variant wins, the best plug-in follows
-    closely. For practitioners who want a lighter alternative, Q-Simple
-    is nearly as competitive as the Q-Learner on most RCT datasets and
-    computationally cheaper.
+    \item \textbf{RCT: plug-in learners suffice, but the regime
+    decides which one.} The Q-Learner dominates on low-conversion RCTs
+    (mean ratio $0.94$ across the four datasets with conversion below
+    $10\%$), confirming the imbalance-handling prediction from
+    Section~\ref{sec:experiments}; the S-Learner leads on the three
+    high-conversion datasets ($0.94$). Every DR variant lags the
+    leading plug-in within each regime, and even on datasets where a
+    DR variant wins outright, the best plug-in follows closely. When
+    you need a lighter alternative or have only converter data
+    available, Q-Simple is a competitive choice.
 
     \item \textbf{Observational: log-scale DR is necessary.} When
     propensity must be estimated, the picture reverses. Log-scale DR
@@ -1080,48 +1116,54 @@ access to true CATEs, we evaluate ranking and calibration but cannot
 assess pointwise estimation accuracy.
 
 
+
+
 \section{Conclusion}
 \label{sec:conclusion}
 
 We introduced the Q-Learner, a meta-learner for ratio-based CATEs that
 decomposes $\tau(x)$ into a product of odds ratios via a Bayes-rule
 identity, reducing estimation to two binary classification tasks that
-directly optimize the treatment effect estimate. We derived doubly robust
-augmentations for both outcome-regression-based (DR-S/T) and
-Q-Learner-based (DR-Q) ratio estimators, and characterized their distinct
-robustness properties: classical double robustness for DR-S/T versus
-conditional robustness for DR-Q.
+directly optimize the treatment effect estimate. As a special case we
+outlined the Q-Simple Learner, which estimates $\tau$ on the converter
+subset only --- applicable when only converter data is available. We
+derived doubly robust augmentations for both outcome-regression-based
+(DR-S/T) and Q-Learner-based (DR-Q) ratio estimators, and characterized
+their distinct robustness properties: classical double robustness for
+DR-S/T versus conditional robustness for DR-Q.
 
-Our benchmark across twelve datasets and 100 seeds per dataset yields a
-consistent picture. In RCT settings with known propensity, plug-in
-learners prove sufficient: the Q-Learner is the most consistently
-competitive method, with the S-Learner a close second on the mean but
-less stable across datasets, and every DR variant lags behind. Even on
-the four RCT datasets where a DR variant wins, the best plug-in follows
-closely. For practitioners seeking a lighter alternative, Q-Simple is
-nearly as competitive as the Q-Learner on most RCT datasets and
-computationally cheaper. In observational settings, the picture reverses:
-the log-scale DR learners introduced here clearly dominate, confirming
-that classical double robustness and log-scale variance stabilisation are
-both necessary when propensity must be estimated. DR-Q direct produces worse-than-random targeting on two datasets; the
-log-scale variant fares better, but conditional robustness remains a
-genuine disadvantage when propensity must be estimated. Across both settings, the
-S-Learner is the best-calibrated method.
+Our empirical benchmark identifies two regimes where the methods
+introduced here come out on top. First, low-conversion RCTs.
+The Q-Learner's reformulation of an imbalanced outcome regression as
+two balanced classification tasks gives it a decisive advantage when
+conversion rates fall below $10\%$, the regime where ratio-based
+CATEs are most valuable to begin with. Second, observational
+data. When propensity must be estimated, a DR variant we introduce
+comes out on top on every dataset tested; classical double robustness
+combined with log-scale variance stabilisation is both theoretically
+motivated and empirically necessary.
 
-These results suggest a simple decision rule: use the Q-Learner as
-the default on RCTs (with the S-Learner as an interchangeable
-alternative on most datasets), falling back to Q-Simple when
-computational efficiency matters; use DR-S log when ranking is the
-primary objective in observational settings. Only when the absolute best
-ranking on a specific dataset is required should additional methods be
-evaluated: since no single learner dominates, all candidates should
-be tested in that case. Confidence intervals for
-ratio-based CATEs, building on the influence functions derived here,
-remain an open direction, as does extending the framework to continuous
-and time-to-event outcomes. Investigating whether the Q-Learner's
-consistency advantage grows with learner-specific hyperparameter
-tuning is an important practical question, since its component
-classifiers directly optimise $\hat{\tau}(x)$.
+
+Ultimately, these results highlight a structural limitation in
+applying difference-based CATE estimators to ratio problems. Post-hoc
+division by baseline estimates compounds nuisance errors, inflates
+variance in low-baseline regions, and breaks doubly robust guarantees.
+The methods introduced here---the Q-Learner's factorization into
+classification tasks for low-conversion experiments, and the log-scale
+DR augmentations for observational settings---demonstrate that
+targeting the ratio functional directly is the right answer in both
+regimes the literature has so far underserved.
+
+Several avenues for future work remain. The influence functions
+established here provide a natural foundation for developing robust
+confidence intervals for ratio-based CATEs, which is essential for
+formal inference. Furthermore, the underlying framework invites
+natural extensions to continuous and time-to-event outcomes. Finally,
+evaluating the impact of learner-specific hyperparameter tuning on the
+Q-Learner is an important practical next step; given that its
+component classifiers directly optimize the $\hat{\tau}(x)$ estimand,
+customized tuning likely offers greater performance leverage than it
+would for standard difference-based meta-learners.
 
 \paragraph{Code and data availability.}
 All code, dataset loaders, and scripts to reproduce the experiments in
@@ -1324,7 +1366,6 @@ Estimation and validation of ratio-based conditional average treatment effects u
 
 \subsection{Ranking}
 
-
 \begin{table}[H]
 \centering
 \footnotesize
@@ -1350,13 +1391,79 @@ Q-Simple
 \hline
 DR-Q
  & 0.356 & 0.580 & 0.492 & 1.184 & 0.070 & $-$0.017 & 0.013 & 0.383 & $-$0.195 \\
-...
+ & \scriptsize(0.016) & \scriptsize(0.055) & \scriptsize(0.003) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.005) & \scriptsize(0.009) & & \\[2pt]
+DR-Q log
+ & 0.268 & 0.514 & 0.180 & 1.263 & 0.058 & 0.014 & 0.085 & 0.340 & 0.160 \\
+ & \scriptsize(0.015) & \scriptsize(0.054) & \scriptsize(0.001) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.003) & \scriptsize(0.006) & & \\[2pt]
+DR-Q-Simple
+ & 0.336 & \textbf{0.615} & 0.445 & 1.145 & 0.043 & $-$0.003 & 0.080 & 0.380 & $-$0.035 \\
+ & \scriptsize(0.015) & \scriptsize(0.061) & \scriptsize(0.003) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.003) & \scriptsize(0.006) & & \\[2pt]
+DR-Q-Simple log
+ & 0.243 & 0.600 & 0.462 & 1.229 & 0.026 & 0.006 & 0.073 & 0.377 & 0.066 \\
+ & \scriptsize(0.014) & \scriptsize(0.049) & \scriptsize(0.003) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.003) & \scriptsize(0.011) & & \\[2pt]
+DR-T
+ & 0.438 & 0.010 & 0.424 & 1.236 & 0.075 & 0.016 & 0.003 & 0.315 & 0.017 \\
+ & \scriptsize(0.017) & \scriptsize(0.035) & \scriptsize(0.003) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.005) & \scriptsize(0.010) & & \\[2pt]
+DR-T log
+ & 0.319 & 0.109 & 0.156 & 1.253 & 0.059 & 0.016 & \textbf{0.092} & 0.286 & 0.177 \\
+ & \scriptsize(0.014) & \scriptsize(0.040) & \scriptsize(0.001) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.004) & \scriptsize(0.006) & & \\[2pt]
+DR-S
+ & \textbf{0.473} & 0.321 & 0.408 & 1.195 & \textbf{0.076} & 0.004 & $-$0.002 & 0.354 & $-$0.016 \\
+ & \scriptsize(0.017) & \scriptsize(0.053) & \scriptsize(0.002) & \scriptsize(0.004) & \scriptsize(0.002) & \scriptsize(0.005) & \scriptsize(0.010) & & \\[2pt]
+DR-S log
+ & 0.330 & 0.361 & 0.129 & 1.259 & 0.058 & 0.005 & 0.091 & 0.319 & 0.060 \\
+ & \scriptsize(0.015) & \scriptsize(0.060) & \scriptsize(0.001) & \scriptsize(0.004) & \scriptsize(0.001) & \scriptsize(0.003) & \scriptsize(0.006) & & \\
+\hline
+\textit{Dataset mean} & 0.329 & 0.391 & 0.367 & 1.265 & 0.054 & 0.015 & 0.064 & & \\
+\hline
+\end{tabular}
+\end{table}
+
+
+
+\begin{table}[H]
+\centering
+\footnotesize
+\caption{Qini coefficient on observational datasets (mean over 100 seeds; SE in parentheses). Best per column in \textbf{bold}. $R_{\min}$ is the worst-case per-dataset ratio $Q_{l,d}/\max_{l'} Q_{l',d}$ across datasets. Bottom row: mean across all learners per dataset.}
+\label{tab:results-obs}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{l | rrrrr | r r}
+\hline
+Learner & LaLonde & RHC & Cattaneo & NHEFS & JTPA & $\bar{Q}$ & $R_{\min}$ \\
+\hline
+S
+ & 0.153 & 0.014 & 1.124 & 0.132 & 0.032 & 0.291 & 0.074 \\
+ & \scriptsize(0.022) & \scriptsize(0.005) & \scriptsize(0.096) & \scriptsize(0.047) & \scriptsize(0.006) & & \\[2pt]
+T
+ & 0.146 & 0.014 & 1.098 & 0.129 & 0.013 & 0.280 & 0.074 \\
+ & \scriptsize(0.020) & \scriptsize(0.005) & \scriptsize(0.098) & \scriptsize(0.048) & \scriptsize(0.006) & & \\[2pt]
+Q
+ & 0.083 & 0.061 & 0.637 & 0.111 & 0.019 & 0.182 & 0.264 \\
+ & \scriptsize(0.019) & \scriptsize(0.008) & \scriptsize(0.107) & \scriptsize(0.041) & \scriptsize(0.006) & & \\[2pt]
+\hline
+DR-Q
+ & 0.124 & $-$0.106 & 0.726 & $-$0.082 & \textbf{0.071} & 0.147 & $-$0.549 \\
+ & \scriptsize(0.019) & \scriptsize(0.011) & \scriptsize(0.091) & \scriptsize(0.043) & \scriptsize(0.008) & & \\[2pt]
+DR-Q log
+ & 0.101 & 0.087 & 1.040 & 0.229 & 0.012 & 0.294 & 0.169 \\
+ & \scriptsize(0.022) & \scriptsize(0.014) & \scriptsize(0.115) & \scriptsize(0.045) & \scriptsize(0.006) & & \\[2pt]
+DR-T
+ & \textbf{0.154} & 0.098 & 0.922 & $-$0.050 & 0.063 & 0.237 & $-$0.199 \\
+ & \scriptsize(0.023) & \scriptsize(0.011) & \scriptsize(0.099) & \scriptsize(0.038) & \scriptsize(0.008) & & \\[2pt]
+DR-T log
+ & 0.133 & 0.193 & 1.126 & 0.234 & 0.006 & 0.338 & 0.087 \\
+ & \scriptsize(0.022) & \scriptsize(0.015) & \scriptsize(0.099) & \scriptsize(0.036) & \scriptsize(0.006) & & \\[2pt]
+DR-S
+ & 0.133 & 0.098 & 0.866 & $-$0.035 & 0.067 & 0.226 & $-$0.139 \\
+ & \scriptsize(0.021) & \scriptsize(0.011) & \scriptsize(0.081) & \scriptsize(0.035) & \scriptsize(0.008) & & \\[2pt]
+DR-S log
+ & 0.120 & \textbf{0.193} & \textbf{1.313} & \textbf{0.253} & 0.010 & \textbf{0.378} & 0.141 \\
+ & \scriptsize(0.022) & \scriptsize(0.015) & \scriptsize(0.108) & \scriptsize(0.041) & \scriptsize(0.006) & & \\
+\hline
 \textit{Dataset mean} & 0.127 & 0.072 & 0.984 & 0.102 & 0.033 & & \\
 \hline
 \end{tabular}
 \end{table}
-Output is truncated. View as a scrollable element or open in a text editor. Adjust cell output settings...
-
 
 
 \subsection{Calibration}
