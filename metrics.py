@@ -94,9 +94,23 @@ def calibration_error(tau_pred: np.ndarray, W: np.ndarray, Y: np.ndarray,
     """
     Calibration Error: Weighted mean absolute log-error across bins.
 
-    Lower = better calibrated predictions.
+    Lower = better calibrated predictions. If tau_pred is constant (e.g.,
+    all probabilities clipped to the same bound), we fall back to a single
+    bucket comparing the constant prediction to the overall empirical ratio.
     """
     bin_edges = np.unique(np.percentile(tau_pred, np.linspace(0, 100, n_bins + 1)))
+
+    # Constant tau_pred → single-bucket fallback.
+    if len(bin_edges) < 2:
+        mask_t, mask_c = W == 1, W == 0
+        if mask_t.sum() == 0 or mask_c.sum() == 0:
+            return np.nan
+        mu_t, mu_c = Y[mask_t].mean(), Y[mask_c].mean()
+        tau_hat = tau_pred.mean()
+        if mu_c <= EPS or mu_t <= EPS or tau_hat <= EPS:
+            return np.nan
+        return np.exp(np.abs(np.log(tau_hat) - np.log(mu_t / mu_c)))
+
     bin_idx = np.digitize(tau_pred, bin_edges[1:-1])
 
     errors, weights = [], []
