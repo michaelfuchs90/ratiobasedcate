@@ -32,7 +32,8 @@
 
 
 \title{Beyond Differences: Doubly Robust Meta-Learners\\for Ratio-Based Treatment Effects%
-\thanks{Code, data, and scripts to reproduce the experiments are available at \url{https://github.com/michaelfuchs90/ratiobasedcate}.}}
+%\thanks{Code, data, and scripts to reproduce the experiments are available at \url{https://github.com/michaelfuchs90/ratiobasedcate}.}
+}
 
 % Here you can change the date presented in the paper title
 %\date{September 9, 1985}
@@ -43,7 +44,9 @@
   Munich, Germany \\
   \texttt{michael.fuchs@outlook.de} \\
   \And
-  Dominik Krei\ss{} \\
+  Dominik Kreiss \\
+  Munich, Germany \\
+  %\texttt{michael.fuchs@outlook.de} \\
   % TODO: fill in Dominik's affiliation and email
 }
 
@@ -54,7 +57,7 @@
 \hypersetup{
 pdftitle={Beyond Differences: Doubly Robust Meta-Learners for Ratio-Based Treatment Effects},
 pdfsubject={stat.ML, stat.ME},
-pdfauthor={Michael Fuchs, Dominik Krei{\ss}},
+pdfauthor={Michael Fuchs, Dominik Kreiss},
 pdfkeywords={Conditional Average Treatment Effect, Ratio-based CATE, Meta-Learner, Doubly Robust Estimation, Heterogeneous Treatment Effects, Uplift Modeling},
 }
 
@@ -77,7 +80,7 @@ seven RCT datasets, the Q-Learner dominates in low-conversion regimes,
 where its propensity-only construction sidesteps the imbalanced
 regression that hurts S- and T-style estimators.
 % Alternative (cleaner, no mechanism): the Q-Learner dominates in low-conversion regimes.
-On five observational
+On four observational
 datasets, where propensity must be estimated and confounding cannot
 be ruled out, the DR learners introduced here always come out on top,
 making them practitioners' natural default for confounded
@@ -192,7 +195,7 @@ propensity knowledge---a distinction with empirical consequences in
 observational settings. 
 
 
-We evaluate all methods on seven RCT and five observational datasets (100
+We evaluate all methods on seven RCT and four observational datasets (100
 seeds each). In experimental settings with known propensity, we confirm
 that the Q-Learner's ability to turn an imbalanced regression problem
 into balanced classification tasks yields superior performance on
@@ -786,7 +789,7 @@ Hillstrom (Visit) \citep{hillstrom2008} &  64k     & 14.7\% & 66.8\% & Email \\
 Hillstrom (Conv.) \citep{hillstrom2008} &  64k     &  0.9\% & 66.8\% & Email \\
 MegaFon \citep{megafon2019}             & 600k     & 20.4\% & 50.1\% & Telecom \\
 X5 Retail \citep{x5retail2020}          & 200k     & 62.0\% & 49.9\% & Retail \\
-Lenta \citep{lenta2021}                 & 687k     &  5.9\% & 50.0\% & Grocery \\
+Lenta \citep{lenta2021}                 & 687k     & 10.8\% & 75.1\% & Grocery \\
 Twins$^*$ \citep{louizos2017}           &  71k     &  3.6\% & 50.0\% & Neonatal \\
 \hline
 \end{tabular}
@@ -802,8 +805,7 @@ estimated.}
 \hline
 Dataset & $n$ & Conv.\ & Treat.\ & Domain \\
 \hline
-LaLonde \citep{lalonde1986}      &  2.7k & 60.0\% & 36.6\% & Job training \\
-RHC \citep{connors1996rhc}       &  5.7k & 68.5\% & 38.0\% & Medical \\
+RHC \citep{connors1996rhc}       &  5.7k & 64.9\% & 38.1\% & Medical \\
 Cattaneo \citep{cattaneo2010}    &  4.6k &  6.0\% & 18.6\% & Birthweight \\
 NHEFS \citep{hernan2020}         &  1.6k & 19.5\% & 26.3\% & Smoking \\
 JTPA \citep{abadie2002}          &  9.2k & 50.0\% & 44.0\% & Job training \\
@@ -975,7 +977,7 @@ must be estimated, the result reverses: DR learners consistently
 outperform plug-in learners. In fact, on every observational dataset
 we tested a DR variant came out on top.
 Table~\ref{tab:results-obs} (Appendix~\ref{app:sec:full-results}) reports
-per-dataset Qini coefficients on the five observational datasets. 
+per-dataset Qini coefficients on the four observational datasets.
 The log-scale DR learners occupy the top three positions
 (\textbf{DR-S log} $0.78$, DR-T log $0.75$, DR-Q log $0.59$), with all
 three plug-ins and the direct-scale DR variants trailing. DR-Q direct
@@ -1018,7 +1020,7 @@ panel ($R_{\min}^Q = 0.26$). All three direct-scale DR learners go
 negative on at least one dataset, and even the log-scale DR variants
 drop below $0.17$ on their weakest dataset. Combined with its
 $R_{\min}^Q = 0.40$ on the RCT panel, the Q-Learner is the only
-learner that never produces a per-dataset failure across the twelve
+learner that never produces a per-dataset failure across the eleven
 datasets.
 
 
@@ -1085,7 +1087,7 @@ score-level decisions.
     side observation, although the Q-Learner trails on the mean, it
     has the highest worst-case ratio of any learner on observational
     data, and is the only learner that never produces a per-dataset
-    failure across all twelve datasets.
+    failure across all eleven datasets.
 
     \item \textbf{Calibration: S-Learner is universally best.} The
     S-Learner dominates calibration in both settings, followed by other
@@ -1160,6 +1162,12 @@ this paper are available at
 The repository includes the 25{,}800-row benchmark CSV, the notebook that
 generates all figures and tables, and a README with replication
 instructions.
+
+\paragraph{Author contributions.}
+M.F. conceived the project, developed the Q-Learner and the doubly robust
+augmentations, derived the theoretical results, designed and conducted all
+empirical experiments, and wrote the manuscript. D.K.  engaged in conceptual discussions, and assisted with editing and refining the manuscript.
+
 
 \paragraph{Acknowledgements.}
 We thank Marco Breitig, and Kristina Weidner for
@@ -1238,11 +1246,6 @@ Semiparametric doubly robust targeted double machine learning: a review.
 K{\"u}nzel, S.~R., Sekhon, J.~S., Bickel, P.~J., and Yu, B. (2019).
 Metalearners for estimating heterogeneous treatment effects using machine learning.
 \emph{PNAS}, 116(10):4156--4165.
-
-\bibitem[LaLonde(1986)]{lalonde1986}
-LaLonde, R.~J. (1986).
-Evaluating the econometric evaluations of training programs with experimental data.
-\emph{The American Economic Review}, 76(4):604--620.
 
 \bibitem[Lenta(2021)]{lenta2021}
 Lenta Uplift Modeling Dataset (2021).

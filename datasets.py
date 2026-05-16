@@ -176,37 +176,6 @@ def load_megafon(test_size: float = 0.2, random_state: int = 42) -> UpliftDatase
     e = np.full(len(W), W.mean())
     return UpliftDataset(X=X, W=W, Y=Y, propensity_true=e, name='megafon', test_size=test_size, random_state=random_state)
 
-def load_lalonde(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
-    """LaLonde (Dehejia-Wahba) Job Training Dataset - observational."""
-
-    def fetch():
-        df = _fetch_lalonde_raw()
-        W = df['treat'].astype(int).values
-        # Binarize outcome: employed = earnings > 0
-        Y = (df['re78'] > 0).astype(int).values
-        feature_cols = ['age', 'education', 'black', 'hispanic', 'married', 'nodegree', 're74', 're75']
-        X = df[[c for c in feature_cols if c in df.columns]].copy()
-        return X, W, Y
-
-    X, W, Y = _load_or_fetch('lalonde', fetch)
-    # Observational study: propensity is unknown
-    return UpliftDataset(X=X, W=W, Y=Y, propensity_true=None, name='lalonde', test_size=test_size, random_state=random_state)
-
-
-def _fetch_lalonde_raw() -> pd.DataFrame:
-    """Try multiple sources for the LaLonde NSW dataset."""
-    errors = []
-
-    # Local file (place nsw_dw.dta or lalonde.csv in data/raw/)
-    for path in [CACHE_DIR.parent / "raw" / "nsw_dw.dta",
-                 CACHE_DIR.parent / "raw" / "lalonde.csv",
-                 Path("nsw_dw.dta"), Path("lalonde.csv")]:
-        if path.exists():
-            if path.suffix == '.dta':
-                return pd.read_stata(path)
-            return pd.read_csv(path)
-
-
 def load_x5_retail(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
     """X5 RetailHero Dataset - SMS promotion campaign."""
 
@@ -327,7 +296,7 @@ def load_twins(n_bins_tau: int = 50, test_size: float = 0.2, random_state: int =
                          name='twins', test_size=test_size, random_state=random_state)
 
 
-def load_lenta(sample_frac: float = 0.3, test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
+def load_lenta(sample_frac: float = 1, test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
     """Lenta grocery retail uplift dataset (Kaggle RCT)."""
     def fetch():
         candidates = [RAW_DIR / "lenta_dataset.csv.gz", RAW_DIR / "lenta_dataset.csv",
@@ -579,9 +548,27 @@ def load_jtpa(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
 # =============================================================================
 
 RCT_DATASETS = ['hillstrom_visit', 'hillstrom_conversion', 'criteo', 'megafon', 'x5_retail', 'lenta']
-OBS_DATASETS = ['lalonde', 'rhc', 'cattaneo', 'nhefs', 'jtpa']
+OBS_DATASETS = ['rhc', 'cattaneo', 'nhefs', 'jtpa']
 SEMI_SYNTHETIC_DATASETS = ['twins']
 ALL_DATASETS = RCT_DATASETS + OBS_DATASETS + SEMI_SYNTHETIC_DATASETS
+
+# Marginal conversion rate per dataset, measured on the loaded data
+# (E[Y] over the full sample). Used by analysis code that splits results
+# by conversion-rate regime. Values may differ slightly from the paper's
+# Tables 1 and 2 when the loader binarizes/filters the raw data.
+CONVERSION_RATES = {
+    'hillstrom_visit':      0.147,
+    'hillstrom_conversion': 0.009,
+    'criteo':               0.047,
+    'megafon':              0.204,
+    'x5_retail':            0.620,
+    'lenta':                0.108,
+    'twins':                0.036,
+    'rhc':                  0.649,
+    'cattaneo':             0.060,
+    'nhefs':                0.195,
+    'jtpa':                 0.500,
+}
 
 def get_dataset(name: str, **kwargs) -> UpliftDataset:
     """Load dataset by name."""
@@ -591,7 +578,6 @@ def get_dataset(name: str, **kwargs) -> UpliftDataset:
         'criteo': load_criteo,
         'megafon': load_megafon,
         'x5_retail': load_x5_retail,
-        'lalonde': load_lalonde,
         'lenta': load_lenta,
         'rhc': load_rhc,
         'twins': load_twins,

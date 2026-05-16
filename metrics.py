@@ -31,7 +31,7 @@ def _safe_divide(a: np.ndarray, b: np.ndarray, default: float = 1.0) -> np.ndarr
 # =============================================================================
 # Ranking Metrics
 # =============================================================================
-def qini_coefficient(tau_pred: np.ndarray, W: np.ndarray, Y: np.ndarray) -> float:
+def qini_coefficient_ratio(tau_pred: np.ndarray, W: np.ndarray, Y: np.ndarray) -> float:
     """
     Ratio-Qini Coefficient: Area between cumulative ratio curve and baseline.
 
@@ -57,39 +57,44 @@ def qini_coefficient(tau_pred: np.ndarray, W: np.ndarray, Y: np.ndarray) -> floa
 
     return auc - baseline
 
-
-def uplift_at_k(tau_pred: np.ndarray, W: np.ndarray, Y: np.ndarray, k: float) -> float:
+def qini_coefficient_difference(tau_pred: np.ndarray, W: np.ndarray, Y: np.ndarray) -> float:
     """
-    Uplift@k: Empirical ratio in top-k% relative to overall.
+    Difference-Qini Coefficient (standard cumulative-gain formulation).
 
-    Values > 1 indicate good ranking (top-k outperforms average).
+    For units sorted by descending tau_pred, computes the cumulative
+    treated-vs-control gain curve
+
+        g(s) = (cum Y_t / n_t) - (cum Y_c / n_c)
+
+    and returns its AUC minus the random-targeting baseline (the
+    triangle from (0,0) to (1, overall_gain)).
+
+    Higher = better ranking of treatment effects.
     """
-    n_top = max(1, int(len(tau_pred) * k))
-    top_idx = np.argsort(-tau_pred)[:n_top]
+    n = len(tau_pred)
+    order = np.argsort(-tau_pred)
+    W_sorted, Y_sorted = W[order], Y[order]
 
-    # Top-k empirical ratio
-    mask_t, mask_c = W[top_idx] == 1, W[top_idx] == 0
-    if mask_t.sum() == 0 or mask_c.sum() == 0:
-        return np.nan
+    n_t = max(int(W.sum()), 1)
+    n_c = max(int((1 - W).sum()), 1)
 
-    tau_top = _safe_divide(
-        np.array([Y[top_idx][mask_t].mean()]),
-        np.array([Y[top_idx][mask_c].mean()]),
-        default=np.nan
-    )[0]
-    if not np.isfinite(tau_top):
-        return np.nan
+    cum_y1 = np.cumsum(Y_sorted * W_sorted) / n_t
+    cum_y0 = np.cumsum(Y_sorted * (1 - W_sorted)) / n_c
+    gain_curve = cum_y1 - cum_y0
 
-    # Overall empirical ratio
-    tau_all = _safe_divide(Y[W == 1].mean(), Y[W == 0].mean(), default=1)
+    s = np.linspace(0, 1, n)
+    auc = np.trapezoid(gain_curve, s)
 
-    return _safe_divide(np.array([tau_top]), np.array([tau_all]), default=1)[0]
+    overall_gain = Y[W == 1].mean() - Y[W == 0].mean()
+    baseline_auc = 0.5 * overall_gain  # triangle (0,0) -> (1, overall_gain)
+
+    return auc - baseline_auc
 
 
 # =============================================================================
 # Calibration Metrics
 # =============================================================================
-def calibration_error(tau_pred: np.ndarray, W: np.ndarray, Y: np.ndarray,
+def calibration_error_ratio(tau_pred: np.ndarray, W: np.ndarray, Y: np.ndarray,
                       n_bins: int = DEFAULT_N_BINS) -> float:
     """
     Calibration Error: Weighted mean absolute log-error across bins.
@@ -134,20 +139,31 @@ def calibration_error(tau_pred: np.ndarray, W: np.ndarray, Y: np.ndarray,
 
     return np.exp(np.average(errors, weights=weights)) if errors else np.nan
 
-
-
-
-def calibration_slope(tau_pred: np.ndarray, W: np.ndarray, Y: np.ndarray,
+def calibration_error_difference(tau_pred: np.ndarray, W: np.ndarray, Y: np.ndarray,
                       n_bins: int = DEFAULT_N_BINS) -> float:
     """
-    Calibration Slope: Regression of log(τ_empirical) on log(τ_predicted).
+    Calibration Error (difference scale): weighted mean absolute error
+    between predicted difference CATE and empirical mean difference per bin.
 
-    Ideal = 1.0. Values < 1 indicate overconfidence.
+    Lower = better calibrated predictions. If tau_pred is constant (e.g.,
+    all probabilities clipped to the same bound), we fall back to a single
+    bucket comparing the constant prediction to the overall empirical
+    difference.
     """
     bin_edges = np.unique(np.percentile(tau_pred, np.linspace(0, 100, n_bins + 1)))
+
+    # Constant tau_pred → single-bucket fallback.
+    if len(bin_edges) < 2:
+        mask_t, mask_c = W == 1, W == 0
+        if mask_t.sum() == 0 or mask_c.sum() == 0:
+            return np.nan
+        mu_t, mu_c = Y[mask_t].mean(), Y[mask_c].mean()
+        tau_hat = tau_pred.mean()
+        return np.abs(tau_hat - (mu_t - mu_c))
+
     bin_idx = np.digitize(tau_pred, bin_edges[1:-1])
 
-    log_pred, log_emp = [], []
+    errors, weights = [], []
 
     for b in range(len(bin_edges) - 1):
         mask = bin_idx == b
@@ -162,57 +178,20 @@ def calibration_slope(tau_pred: np.ndarray, W: np.ndarray, Y: np.ndarray,
         if mu_c <= EPS or mu_t <= EPS or tau_hat <= EPS:
             continue
 
-        tau_emp = mu_t / mu_c
-        log_pred.append(np.log(tau_hat))
-        log_emp.append(np.log(tau_emp))
+        tau_emp = mu_t - mu_c
+        errors.append(np.abs(tau_hat - tau_emp))
+        weights.append(mask.sum())
 
-    if len(log_pred) < 2:
-        return np.nan
-    try:
-        result = stats.linregress(log_pred, log_emp).slope
-    except Exception:
-        result = np.nan
- 
-    return result
+    return (np.average(errors, weights=weights)) if errors else np.nan
 
-
-# =============================================================================
-# Ground Truth Metrics
-# =============================================================================
-def rmse_tau(tau_pred: np.ndarray, tau_true: np.ndarray) -> float:
-    """RMSE on original scale."""
-    return np.sqrt(np.mean((tau_pred - tau_true) ** 2))
-
-
-def rmse_log_tau(tau_pred: np.ndarray, tau_true: np.ndarray) -> float:
-    """RMSE on log scale (appropriate for ratios)."""
-    log_pred = np.log(np.clip(tau_pred, EPS, None))
-    log_true = np.log(np.clip(tau_true, EPS, None))
-    return np.sqrt(np.mean((log_pred - log_true) ** 2))
-
-
-def mae_tau(tau_pred: np.ndarray, tau_true: np.ndarray) -> float:
-    """Mean Absolute Error."""
-    return np.mean(np.abs(tau_pred - tau_true))
-
-
-def spearman_tau(tau_pred: np.ndarray, tau_true: np.ndarray) -> float:
-    """Spearman rank correlation."""
-    return stats.spearmanr(tau_pred, tau_true)[0]
-
-
-def pearson_tau(tau_pred: np.ndarray, tau_true: np.ndarray) -> float:
-    """Pearson correlation."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", stats.NearConstantInputWarning)
-        return stats.pearsonr(tau_pred, tau_true)[0]
 
 
 # =============================================================================
 # Main Evaluation Function
 # =============================================================================
 def evaluate_predictions(
-    tau_pred: np.ndarray,
+    tau_ratio_pred: np.ndarray,
+    tau_difference_pred: np.ndarray,
     W: np.ndarray,
     Y: np.ndarray,
     tau_true: Optional[np.ndarray] = None,
@@ -229,47 +208,13 @@ def evaluate_predictions(
     """
     results = {
         # Ranking
-        'qini': qini_coefficient(tau_pred, W, Y),
-        f'uplift@{k}': uplift_at_k(tau_pred, W, Y, k),
+        'qini_ratio':       qini_coefficient_ratio(tau_ratio_pred, W, Y),
+        'qini_difference':  qini_coefficient_difference(tau_difference_pred, W, Y),
         # Calibration
-        'cal_error': calibration_error(tau_pred, W, Y, n_bins),
-        'cal_slope': calibration_slope(tau_pred, W, Y, n_bins),
+        'cal_error_ratio':       calibration_error_ratio(tau_ratio_pred, W, Y, n_bins),
+        'cal_error_difference':  calibration_error_difference(tau_difference_pred, W, Y, n_bins),
     }
-
-    # Ground truth (synthetic only)
-    if tau_true is not None:
-        results.update({
-            'rmse': rmse_tau(tau_pred, tau_true),
-            'rmse_log': rmse_log_tau(tau_pred, tau_true),
-            'mae': mae_tau(tau_pred, tau_true),
-            'spearman': spearman_tau(tau_pred, tau_true),
-            'pearson': pearson_tau(tau_pred, tau_true),
-        })
 
     return results
 
 
-# =============================================================================
-# Test
-# =============================================================================
-if __name__ == '__main__':
-    np.random.seed(42)
-    n = 5000
-
-    # Synthetic data
-    tau_true = 1 + np.random.exponential(0.5, n)
-    tau_pred = tau_true + np.random.normal(0, 0.3, n)
-    tau_pred = np.clip(tau_pred, 0.1, None)
-
-    W = np.random.binomial(1, 0.5, n)
-    mu0 = 0.1
-    mu1 = mu0 * tau_true
-    Y = np.where(W == 1, np.random.binomial(1, np.clip(mu1, 0, 1)), 
-                         np.random.binomial(1, mu0))
-
-    results = evaluate_predictions(tau_pred, W, Y, tau_true)
-
-    print("Evaluation Results")
-    print("=" * 40)
-    for metric, value in results.items():
-        print(f"{metric:15} {value:.4f}")

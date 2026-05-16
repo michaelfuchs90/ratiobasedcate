@@ -42,6 +42,8 @@ def winsorise(x: np.ndarray, lower: float = 1.0, upper: float = 99.0) -> np.ndar
 # =============================================================================
 # Base Class
 # =============================================================================
+
+
 class BaseLearner(ABC):
     """Abstract base for CATE learners.
 
@@ -57,9 +59,12 @@ class BaseLearner(ABC):
             propensity: np.ndarray = None) -> 'BaseLearner':
         pass
 
-    @abstractmethod
-    def predict(self, X: pd.DataFrame, propensity: np.ndarray = None) -> np.ndarray:
-        pass
+    
+    def predict_ratio_cate(self, X: pd.DataFrame, propensity: np.ndarray = None) -> np.ndarray:
+        return None
+    def predict_difference_cate(self, X: pd.DataFrame, propensity: np.ndarray = None) -> np.ndarray:
+        return None
+
 
 
 # =============================================================================
@@ -77,7 +82,7 @@ class SLearner(BaseLearner):
         self._model = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state).fit(X, Y)
         return self
 
-    def predict(self, X, propensity=None):
+    def predict_ratio_cate(self, X, propensity=None):
         X1, X0 = X.copy(), X.copy()
         X1['_W'], X0['_W'] = 1, 0
         mu1 = clip(self._model.predict_proba(X1)[:, 1], CLIP_OUTCOME_PROB)
@@ -85,6 +90,12 @@ class SLearner(BaseLearner):
         tau = mu1 / mu0
         return clip(tau, CLIP_TAU)
 
+    def predict_difference_cate(self, X, propensity=None):
+        X1, X0 = X.copy(), X.copy()
+        X1['_W'], X0['_W'] = 1, 0
+        mu1 = clip(self._model.predict_proba(X1)[:, 1], CLIP_OUTCOME_PROB)
+        mu0 = clip(self._model.predict_proba(X0)[:, 1], CLIP_OUTCOME_PROB)
+        return mu1 - mu0
 
 class TLearner(BaseLearner):
     """Separate models for treated/control."""
@@ -97,12 +108,16 @@ class TLearner(BaseLearner):
         self._m0 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state).fit(X[W==0], Y[W==0])
         return self
 
-    def predict(self, X, propensity=None):
+    def predict_ratio_cate(self, X, propensity=None):
         mu1 = clip(self._m1.predict_proba(X)[:, 1], CLIP_OUTCOME_PROB)
         mu0 = clip(self._m0.predict_proba(X)[:, 1], CLIP_OUTCOME_PROB)
         tau = mu1 / mu0
         return clip(tau, CLIP_TAU)
 
+    def predict_difference_cate(self, X, propensity=None):
+        mu1 = clip(self._m1.predict_proba(X)[:, 1], CLIP_OUTCOME_PROB)
+        mu0 = clip(self._m0.predict_proba(X)[:, 1], CLIP_OUTCOME_PROB)
+        return mu1-mu0
 
 class QLearner(BaseLearner):
     """Q-Learner for ratio-based CATE.
@@ -132,7 +147,7 @@ class QLearner(BaseLearner):
         self._p_model = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state).fit(X[Y == 1], W[Y == 1])
         return self
 
-    def predict(self, X, propensity=None):
+    def predict_ratio_cate(self, X, propensity=None):
         # Always use the estimated propensity model — see Remark (Variance Equivalence):
         # the variance cancellation requires p̂ and ê to be correlated through the same data.
         e = clip(self._e_model.predict_proba(X)[:, 1], CLIP_PROPENSITY)
@@ -228,7 +243,7 @@ class DRBaseLearner(BaseLearner):
 
         return psi
 
-    def predict(self, X, propensity=None):
+    def predict_ratio_cate(self, X, propensity=None):
         prediction = self._final.predict(X)
         if self.scale=='log':
             prediction = clip(prediction, CLIP_LOG_PSEUDO)
@@ -239,6 +254,10 @@ class DRBaseLearner(BaseLearner):
 
     def _fit_outcome_models(self, Xtr, Xte, Wtr, Ytr):
         raise NotImplementedError("Subclasses must implement _fit_outcome_models")
+
+
+
+
 
 # =============================================================================
 # DR-T Learner (separate outcome models per treatment arm)
@@ -391,7 +410,7 @@ class DRQLearner(BaseLearner):
 
         return psi
 
-    def predict(self, X, propensity=None):
+    def predict_ratio_cate(self, X, propensity=None):
         prediction = self._final.predict(X)
         if self.scale=="log":
             prediction = clip(prediction, CLIP_LOG_PSEUDO)
@@ -431,7 +450,7 @@ class QSimpleLearner(BaseLearner):
         self._p_model = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state).fit(X[Y == 1], W[Y == 1])
         return self
 
-    def predict(self, X, propensity=None):
+    def predict_ratio_cate(self, X, propensity=None):
         p = clip(self._p_model.predict_proba(X)[:, 1], CLIP_CONVERTER_PROP)
         e = clip(self._e_model.predict(X), CLIP_PROPENSITY)
         tau = (p / (1 - p)) * ((1 - e) / e)
@@ -526,7 +545,7 @@ class DRQSimpleLearner(BaseLearner):
 
         return psi
 
-    def predict(self, X, propensity=None):
+    def predict_ratio_cate(self, X, propensity=None):
         prediction = self._final.predict(X)
         if self.scale == 'log':
             prediction = clip(prediction, CLIP_LOG_PSEUDO)
@@ -534,6 +553,344 @@ class DRQSimpleLearner(BaseLearner):
         else:
             tau = prediction
         return clip(tau, CLIP_TAU)
+
+
+
+
+
+# =============================================================================
+# X-Learner (difference-scale, converted to ratio via mu0)
+# =============================================================================
+
+class XLearner(BaseLearner):
+    """X-Learner (Künzel et al. 2019) with ratio-CATE output.
+
+    Fits T-learner outcome models μ̂_1(x), μ̂_0(x), imputes pseudo-effects
+    for each arm, fits arm-specific CATE models τ̂_1(x) / τ̂_0(x), and
+    combines them with the propensity score:
+
+        τ̂_diff(x) = e(x) · τ̂_0(x) + (1 − e(x)) · τ̂_1(x)
+
+        
+
+    Parameters
+    ----------
+    random_state : int, default 42
+    """
+
+    def __init__(self, random_state=42):
+        self.random_state = random_state
+
+    def fit(self, X, W, Y, propensity=None):
+        # Stage 1: T-learner outcome models
+        self._m1 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
+        self._m0 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
+        self._m1.fit(X[W == 1], Y[W == 1])
+        self._m0.fit(X[W == 0], Y[W == 0])
+
+        mu1 = clip(self._m1.predict_proba(X)[:, 1], CLIP_OUTCOME_PROB)
+        mu0 = clip(self._m0.predict_proba(X)[:, 1], CLIP_OUTCOME_PROB)
+
+        # Stage 2: Imputed pseudo-effects per arm
+        # For treated units: D1 = Y - μ̂_0(x)  (observed minus counterfactual control)
+        # For control units: D0 = μ̂_1(x) - Y  (counterfactual treated minus observed)
+        D1 = Y[W == 1] - mu0[W == 1]
+        D0 = mu1[W == 0] - Y[W == 0]
+
+        # Stage 3: Fit arm-specific CATE models on imputed effects
+        self._tau1 = lgb.LGBMRegressor(**LGBM_PARAMS, random_state=self.random_state)
+        self._tau0 = lgb.LGBMRegressor(**LGBM_PARAMS, random_state=self.random_state)
+        self._tau1.fit(X[W == 1], D1)
+        self._tau0.fit(X[W == 0], D0)
+
+        # Stage 4: Propensity model for blending
+        self._e_model = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
+        self._e_model.fit(X, W)
+
+        return self
+
+    def predict_difference_cate(self, X, propensity=None):
+        e = clip(self._e_model.predict_proba(X)[:, 1], CLIP_PROPENSITY)
+        tau1_hat = self._tau1.predict(X)
+        tau0_hat = self._tau0.predict(X)
+
+        # Propensity-weighted blend (Künzel et al. eq. 9)
+        tau_diff = e * tau0_hat + (1.0 - e) * tau1_hat
+
+        return tau_diff
+
+
+# =============================================================================
+# X-Learner on the Log Scale (no mu0 transform needed)
+# =============================================================================
+class XLearnerLog(BaseLearner):
+    """X-Learner on the log-ratio scale.
+
+    Uses the T-learner log-ratio plug-in as the imputed pseudo-effect
+    for each arm:
+
+        D1_i = log μ̂_1(x_i) - log μ̂_0(x_i)   for treated units
+        D0_i = log μ̂_1(x_i) - log μ̂_0(x_i)   for control units
+
+    Arm-specific models τ̂_1(x), τ̂_0(x) are then fitted on these
+    imputed log-effects and blended with the propensity score.
+    predict() exponentiates — no mu0 transform needed.
+    """
+
+    def __init__(self, random_state=42):
+        self.random_state = random_state
+
+    def fit(self, X, W, Y, propensity=None):
+        self._m1 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
+        self._m0 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
+        self._m1.fit(X[W == 1], Y[W == 1])
+        self._m0.fit(X[W == 0], Y[W == 0])
+
+        mu1 = clip(self._m1.predict_proba(X)[:, 1], CLIP_OUTCOME_PROB)
+        mu0 = clip(self._m0.predict_proba(X)[:, 1], CLIP_OUTCOME_PROB)
+        log_tau_plugin = np.log(mu1) - np.log(mu0)
+        log_tau_plugin = clip(log_tau_plugin, CLIP_LOG_PSEUDO)
+
+        # Imputed log-ratio pseudo-effects: plug-in evaluated at each unit's X
+        D1 = log_tau_plugin[W == 1]
+        D0 = log_tau_plugin[W == 0]
+
+        self._tau1 = lgb.LGBMRegressor(**LGBM_PARAMS, random_state=self.random_state)
+        self._tau0 = lgb.LGBMRegressor(**LGBM_PARAMS, random_state=self.random_state)
+        self._tau1.fit(X[W == 1], D1)
+        self._tau0.fit(X[W == 0], D0)
+
+        self._e_model = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
+        self._e_model.fit(X, W)
+        return self
+
+    def predict_ratio_cate(self, X, propensity=None):
+        e = clip(self._e_model.predict_proba(X)[:, 1], CLIP_PROPENSITY)
+        log_tau1 = clip(self._tau1.predict(X), CLIP_LOG_PSEUDO)
+        log_tau0 = clip(self._tau0.predict(X), CLIP_LOG_PSEUDO)
+        log_tau = e * log_tau0 + (1.0 - e) * log_tau1
+        return clip(np.exp(clip(log_tau, CLIP_LOG_PSEUDO)), CLIP_TAU)
+
+
+class RLearner(BaseLearner):
+    """R-Learner with ratio-CATE output. Cross-fits m(x) and e(x) only."""
+
+    def __init__(self, n_splits=5, random_state=42):
+        self.n_splits = n_splits
+        self.random_state = random_state
+
+    def fit(self, X, W, Y, propensity=None):
+        n = len(Y)
+        m_cf  = np.zeros(n)
+        e_cf  = np.zeros(n)
+
+        kf = KFold(n_splits=self.n_splits, shuffle=True,
+                   random_state=self.random_state)
+        for tr, te in kf.split(X):
+            Xtr, Xte = X.iloc[tr], X.iloc[te]
+            Wtr, Ytr = W[tr], Y[tr]
+
+            m_model = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
+            m_model.fit(Xtr, Ytr)
+            m_cf[te] = m_model.predict_proba(Xte)[:, 1]
+
+            e_model = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
+            e_model.fit(Xtr, Wtr)
+            e_cf[te] = e_model.predict_proba(Xte)[:, 1]
+
+        m_cf = clip(m_cf, CLIP_OUTCOME_PROB)
+        e_cf = clip(e_cf, CLIP_PROPENSITY)
+
+        Y_tilde = Y - m_cf
+        W_tilde = W - e_cf
+        weights = W_tilde ** 2
+
+        # Pseudo-outcome: Ỹ / W̃, winsorised for stability
+        W_tilde_safe = np.where(np.abs(W_tilde) < 1e-3, 1e-3, W_tilde)
+        pseudo = winsorise(Y_tilde / W_tilde_safe)
+
+        self._final = lgb.LGBMRegressor(**LGBM_PARAMS, random_state=self.random_state)
+        self._final.fit(X, pseudo, sample_weight=weights)
+
+        return self
+
+    def predict_difference_cate(self, X, propensity=None):
+        return self._final.predict(X)
+
+
+# =============================================================================
+# Log R-Learner
+# =============================================================================
+
+class RLearnerLog(BaseLearner):
+    """R-Learner on the log-ratio scale for binary outcomes.
+
+    Derives from the multiplicative partially linear model:
+
+        log μ_w(x) = log μ_0(x) + W · log τ(x)
+
+    which implies the residualised form:
+
+        L̃_i = log τ(x_i) · W̃_i + ε_i
+
+    where:
+        L̃_i = log μ̂_{W_i}(x_i) - ℓ̂(x_i)       (log-outcome residual)
+        W̃_i = W_i - ê(x_i)                        (treatment residual)
+        ℓ̂(x) = ê(x)·log μ̂_1(x) + (1-ê(x))·log μ̂_0(x)   (marginal log-outcome)
+
+    Because Y ∈ {0,1}, we cannot take log Y directly. Instead we
+    residualise the *model-predicted* log-probability log μ̂_{W_i}(x_i),
+    which is well-defined. This is the standard substitution for binary
+    outcomes in log-linear partially linear models.
+
+    The R-loss on the log scale:
+
+        min_θ Σ_i (L̃_i - θ(x_i)·W̃_i)² · W̃_i²
+
+    gives pseudo-outcome θ̂ = L̃ / W̃ with weights W̃².
+
+    predict() returns τ̂(x) = exp(θ̂(x)), clipped to CLIP_TAU.
+
+    Parameters
+    ----------
+    n_splits : int, default 5
+        Cross-fitting folds for μ̂_1, μ̂_0, ê.
+    random_state : int, default 42
+    """
+
+    def __init__(self, n_splits=5, random_state=42):
+        self.n_splits = n_splits
+        self.random_state = random_state
+
+    def fit(self, X, W, Y, propensity=None):
+        n = len(Y)
+        mu1_cf = np.zeros(n)
+        mu0_cf = np.zeros(n)
+        e_cf   = np.zeros(n)
+
+        kf = KFold(n_splits=self.n_splits, shuffle=True,
+                   random_state=self.random_state)
+        for tr, te in kf.split(X):
+            Xtr, Xte = X.iloc[tr], X.iloc[te]
+            Wtr, Ytr = W[tr], Y[tr]
+
+            m1 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
+            m0 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
+            m1.fit(Xtr[Wtr == 1], Ytr[Wtr == 1])
+            m0.fit(Xtr[Wtr == 0], Ytr[Wtr == 0])
+            mu1_cf[te] = m1.predict_proba(Xte)[:, 1]
+            mu0_cf[te] = m0.predict_proba(Xte)[:, 1]
+
+            e_model = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
+            e_model.fit(Xtr, Wtr)
+            e_cf[te] = e_model.predict_proba(Xte)[:, 1]
+
+        mu1_cf = clip(mu1_cf, CLIP_OUTCOME_PROB)
+        mu0_cf = clip(mu0_cf, CLIP_OUTCOME_PROB)
+        e_cf   = clip(e_cf,   CLIP_PROPENSITY)
+
+        # Log-outcome at the observed treatment arm for each unit
+        # log μ̂_{W_i}(x_i): use mu1 where treated, mu0 where control
+        log_mu_obs = np.where(W == 1, np.log(mu1_cf), np.log(mu0_cf))
+
+        # Marginal log-outcome: ê(x)·log μ̂_1(x) + (1-ê(x))·log μ̂_0(x)
+        log_mu_marginal = e_cf * np.log(mu1_cf) + (1.0 - e_cf) * np.log(mu0_cf)
+
+        # Log-outcome residual L̃ and treatment residual W̃
+        L_tilde = log_mu_obs - log_mu_marginal
+        W_tilde = W - e_cf
+
+        # R-loss pseudo-outcome: L̃ / W̃, weighted by W̃²
+        W_tilde_safe = np.where(np.abs(W_tilde) < 1e-3, 1e-3, W_tilde)
+        pseudo = L_tilde / W_tilde_safe
+        pseudo = clip(pseudo, CLIP_LOG_PSEUDO)
+        weights = W_tilde ** 2
+
+        self._final = lgb.LGBMRegressor(**LGBM_PARAMS,
+                                         random_state=self.random_state)
+        self._final.fit(X, pseudo, sample_weight=weights)
+        return self
+
+    def predict_ratio_cate(self, X, propensity=None):
+        log_tau = clip(self._final.predict(X), CLIP_LOG_PSEUDO)
+        return clip(np.exp(log_tau), CLIP_TAU)
+
+
+# =============================================================================
+# DR-Learner (difference-scale DR, converted to ratio via mu0)
+# =============================================================================
+
+class DRLearner(BaseLearner):
+    """Classical DR-Learner (Kennedy 2022) with ratio-CATE output.
+
+    Constructs the standard AIPW pseudo-outcome:
+
+        Γ_i = (μ̂_1(x) − μ̂_0(x))
+              + W(Y − μ̂_1(x)) / ê(x)
+              − (1−W)(Y − μ̂_0(x)) / (1 − ê(x))
+
+    and regresses it on X. 
+    This is the standard difference-scale DR-learner; it is doubly robust
+    in the classical sense (consistent if either outcome models or
+    propensity is correctly specified).
+
+    Parameters
+    ----------
+    n_splits : int, default 5
+    random_state : int, default 42
+    """
+
+    def __init__(self, n_splits=5, random_state=42):
+        self.n_splits = n_splits
+        self.random_state = random_state
+
+    def fit(self, X, W, Y, propensity=None):
+        n = len(Y)
+        mu1_cf = np.zeros(n)
+        mu0_cf = np.zeros(n)
+        e_cf   = np.zeros(n)
+
+        kf = KFold(n_splits=self.n_splits, shuffle=True, random_state=self.random_state)
+        for tr, te in kf.split(X):
+            Xtr, Xte = X.iloc[tr], X.iloc[te]
+            Wtr, Ytr = W[tr], Y[tr]
+
+            m1 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
+            m0 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
+            m1.fit(Xtr[Wtr == 1], Ytr[Wtr == 1])
+            m0.fit(Xtr[Wtr == 0], Ytr[Wtr == 0])
+            mu1_cf[te] = m1.predict_proba(Xte)[:, 1]
+            mu0_cf[te] = m0.predict_proba(Xte)[:, 1]
+
+            e_model = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
+            e_model.fit(Xtr, Wtr)
+            e_cf[te] = e_model.predict_proba(Xte)[:, 1]
+
+        mu1_cf = clip(mu1_cf, CLIP_OUTCOME_PROB)
+        mu0_cf = clip(mu0_cf, CLIP_OUTCOME_PROB)
+        e_cf   = clip(e_cf,   CLIP_PROPENSITY)
+
+        # AIPW pseudo-outcome (difference scale)
+        psi = (mu1_cf - mu0_cf
+               + W * (Y - mu1_cf) / e_cf
+               - (1 - W) * (Y - mu0_cf) / (1 - e_cf))
+        psi = clip(psi, CLIP_DIRECT_PSEUDO)
+
+        self._final = lgb.LGBMRegressor(**LGBM_PARAMS, random_state=self.random_state)
+        self._final.fit(X, psi)
+
+
+        return self
+
+    def predict_difference_cate(self, X, propensity=None):
+        return self._final.predict(X)
+
+
+
+
+
+
+
 
 
 # =============================================================================
@@ -552,6 +909,11 @@ ALL_LEARNER = {
     'drq_direct':     lambda rs: DRQLearner(scale='direct', random_state=rs),
     'drq_simple_log':     lambda rs: DRQSimpleLearner(scale='log', random_state=rs),
     'drq_simple_direct':  lambda rs: DRQSimpleLearner(scale='direct', random_state=rs),
+    'x':              lambda rs: XLearner(rs),
+    'x_log':          lambda rs: XLearnerLog(rs),
+    'r':              lambda rs: RLearner(random_state=rs),
+    'r_log':            lambda rs: RLearnerLog(random_state=rs),
+    'dr_diff':        lambda rs: DRLearner(random_state=rs),
 }
 
 
@@ -564,27 +926,3 @@ def get_learner(name: str, random_state: int = 42) -> BaseLearner:
 
 
 
-# =============================================================================
-# Test
-# =============================================================================
-if __name__ == '__main__':
-    np.random.seed(42)
-    n = 2000
-    X = pd.DataFrame(np.random.randn(n, 3), columns=['x1', 'x2', 'x3'])
-    W = np.random.binomial(1, 0.5, n)
-    Y = np.random.binomial(1, 0.1 + 0.1 * W, n)
-    propensity = np.full(n, 0.5)
-
-    print(f"True τ = 2.0 | n={n} | converters={Y.sum()}")
-    print("=" * 50)
-
-    for name in ALL_LEARNER.keys():
-        learner = get_learner(name)
-        learner.fit(X, W, Y, propensity=propensity)
-        tau = learner.predict(X, propensity=propensity)
-        print(f"{name:18} τ = {np.median(tau):.3f} (std={np.std(tau):.3f})")
-
-        cal = CalibratedCATELearner(learner, random_state=42)
-        cal.fit(X, W, Y, propensity=propensity)
-        tau_cal = cal.predict(X, propensity=propensity)
-        print(f"{name + '_cal':18} τ = {np.median(tau_cal):.3f} (std={np.std(tau_cal):.3f})")
