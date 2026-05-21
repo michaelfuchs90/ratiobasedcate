@@ -76,15 +76,11 @@ benchmark.py           Per-seed benchmark loop with idempotent CSV checkpointing
 visualization.py       Heatmaps and the regime-specific scatter / dot-cloud figures
 tables.py              LaTeX table generation
 Benchmark.ipynb        End-to-end driver: benchmark + figures + LaTeX tables
-Benchmark.html         Rendered snapshot of the notebook
+Benchmark.html         Rendered snapshot of the notebook including figures and tables
 benchmark_results.csv  Per-seed result table (11 datasets × 15 learners × ≥50 seeds)
 data/raw/              Locally-stored CSVs for datasets not covered by sklift
 data/processed/        Feather-cached per-seed outputs (regenerable; .gitignored)
 paper.tex              Paper source
-fig_rct_dots_with_lines.png  RCT figure (Q vs. Q-Simple by conversion rate)
-fig_obs_new_vs_rest.png      Observational figure (best DR vs. best non-DR)
-fig_heatmap_qini_*.png       Per-(learner, dataset) Qini heatmaps (appendix)
-fig_heatmap_cal_*.png        Per-(learner, dataset) calibration heatmaps (appendix)
 ```
 
 ## Quick start
