@@ -2,7 +2,7 @@
 
 Code and data accompanying the paper
 **"Beyond Differences: Doubly Robust Meta-Learners for Ratio-Based Treatment Effects"**
-(Fuchs, 2026).
+(Fuchs & Kreiß, 2026).
 <!-- AUTHOR-TODO: Replace XXXX.XXXXX with arXiv ID once assigned, then fill in the BibTeX in the Citation section below. -->
 
 ## Overview
@@ -19,27 +19,36 @@ estimand is the **ratio-based Conditional Average Treatment Effect**:
 
 This repository implements the methods proposed in the paper:
 
-- The **Q-Learner**, which expresses `τ(x)` through an algebraic identity
-  in terms of the propensity `e(x)` and the converter-propensity `p(x)`,
-  reducing ratio-CATE estimation to two binary classification tasks.
-- **Doubly robust extensions** (DR-T, DR-S, DR-Q, DR-Q-Simple and their
-  log-scale variants) with differing robustness guarantees: classical
-  double robustness for DR-T/DR-S, conditional robustness for DR-Q.
-- A **rank-preserving log-linear calibration** procedure.
-- Qini-coefficient ranking metric adapted to ratio effects, plus a
-  bin-level log-absolute calibration error on the multiplicative scale.
+- The **Q-Learner**, which expresses `τ(x)` through a Bayes-rule
+  decomposition into a product of two odds ratios, reducing ratio-CATE
+  estimation for binary outcomes to two binary classification tasks.
+  As a special case, the **Q-Simple Learner** uses only the converter
+  subset and is applicable when the propensity `e(x)` is known.
+- **Doubly robust extensions** of the S-, T-, Q-, and Q-Simple
+  Learners, in both direct- and log-scale variants, with differing
+  robustness guarantees: classical double robustness for DR-S/DR-T,
+  conditional robustness for DR-Q.
+- The Qini coefficient adapted to ratio effects, and a bin-level
+  log-absolute calibration error on the multiplicative scale.
 
 Empirical highlights from the paper:
 
-- On **seven RCT datasets**, no single learner dominates for ranking,
-  but the **Q-Learner** is the most consistently competitive across
-  datasets, with the S-Learner a close second on the mean but less
-  stable. The S-Learner is the best-calibrated method.
-- On **four observational datasets**, **DR-S log** emerges as the
-  clear ranking winner, with DR-T log as a close second, confirming
-  the importance of classical double robustness combined with
-  log-scale variance stabilisation. DR-Q's conditional robustness
-  proves insufficient (negative Qini on RHC and NHEFS).
+- **RCTs split by conversion rate.** On the three high-conversion
+  RCTs (X5, MegaFon, Criteo), the plain S-Learner sits within a hair
+  of the dataset winner — no causal meta-learner is needed. On the
+  four low-conversion RCTs (H(Conv), Twins, Criteo, Lenta), the
+  **Q-Learner** is the most consistent choice, significantly beating
+  the S-Learner on three of four datasets. No DR variant is
+  consistently ahead of the leading plug-in on RCT data.
+- **Observational data: DR earns its keep.** On the four
+  observational datasets (Cattaneo, NHEFS, JTPA, RHC), a DR variant
+  introduced here takes the top spot on three of four; on RHC the
+  R-Learner edges them out. Among DR variants, log-scale dominates at
+  low conversion rates (Cattaneo, NHEFS) and direct-scale becomes
+  competitive at higher conversion rates (JTPA, RHC).
+- **Calibration.** The S-Learner is the best- or near-best-calibrated
+  method on every dataset; direct-scale DR variants are persistently
+  miscalibrated by factors of 2–10×.
 
 ## Installation
 
@@ -59,19 +68,23 @@ dataset loaders), [`lightgbm`](https://lightgbm.readthedocs.io/), and
 ## Repository structure
 
 ```
-learner.py           17 learner implementations (S/T/Q/X/R and DR-* variants)
-calibration.py       Rank-preserving log-linear calibration
-metrics.py           Qini, uplift@k, calibration error
-datasets.py          Loaders for 12 benchmark datasets
-Benchmark.ipynb      End-to-end benchmark + figures + LaTeX table generation
-Benchmark.html       Rendered snapshot of the notebook
-benchmark_results.csv  Per-seed result table (11 datasets × 17 learners × 25 seeds)
-benchmark_summary.csv  Aggregated summary metrics
-data/raw/            Locally-stored CSVs for datasets not covered by sklift
-data/processed/      Feather-cached per-seed outputs (regenerable; .gitignored)
-paper.tex            Paper source
-fig_qini_gap.png     Figure 1 of the paper
-fig_cal_gap.png      Figure 2 of the paper
+learner.py             15 learner implementations (S/T/Q/X/R/DR and DR-S/T/Q/Q-Simple in direct + log variants)
+calibration.py         Rank-preserving log-linear calibration
+metrics.py             Qini and multiplicative calibration error (ratio + difference scales)
+datasets.py            Loaders for 11 benchmark datasets
+benchmark.py           Per-seed benchmark loop with idempotent CSV checkpointing
+visualization.py       Heatmaps and the regime-specific scatter / dot-cloud figures
+tables.py              LaTeX table generation
+Benchmark.ipynb        End-to-end driver: benchmark + figures + LaTeX tables
+Benchmark.html         Rendered snapshot of the notebook
+benchmark_results.csv  Per-seed result table (11 datasets × 15 learners × ≥50 seeds)
+data/raw/              Locally-stored CSVs for datasets not covered by sklift
+data/processed/        Feather-cached per-seed outputs (regenerable; .gitignored)
+paper.tex              Paper source
+fig_rct_dots_with_lines.png  RCT figure (Q vs. Q-Simple by conversion rate)
+fig_obs_new_vs_rest.png      Observational figure (best DR vs. best non-DR)
+fig_heatmap_qini_*.png       Per-(learner, dataset) Qini heatmaps (appendix)
+fig_heatmap_cal_*.png        Per-(learner, dataset) calibration heatmaps (appendix)
 ```
 
 ## Quick start
@@ -79,45 +92,55 @@ fig_cal_gap.png      Figure 2 of the paper
 ```python
 from datasets import get_dataset
 from learner import get_learner
-from metrics import qini, calibration_error
+from metrics import qini_coefficient_ratio, calibration_error_ratio
 
 # Load a dataset (returns an UpliftDataset with train/test splits)
-data = get_dataset('hillstrom_visit', random_state=42)
+data = get_dataset('H(Conv)', random_state=42)
 
 # Instantiate and fit a Q-Learner
-learner = get_learner('q', random_state=42)
+learner = get_learner('Q', random_state=42)
 learner.fit(data.X_train, data.W_train, data.Y_train)
 
 # Predict ratio CATEs on the test set
 tau = learner.predict(data.X_test)
 
 # Evaluate
-print(f"Qini  = {qini(data.Y_test, data.W_test, tau):.3f}")
-print(f"CalEr = {calibration_error(data.Y_test, data.W_test, tau, n_bins=10):.3f}")
+print(f"Qini    = {qini_coefficient_ratio(tau, data.W_test, data.Y_test):.3f}")
+print(f"CalEr   = {calibration_error_ratio(tau, data.W_test, data.Y_test):.3f}")
 ```
 
-Available learners (see `learner.ALL_LEARNER`):
-`s`, `t`, `q`, `q_simple`, `drs_log`, `drt_log`, `drq_log`,
-`drs_direct`, `drt_direct`, `drq_direct`, `drq_simple_log`,
-`drq_simple_direct`.
+Available learners (keys of `learner.ALL_LEARNER`):
+`S`, `T`, `X`, `R`, `DR`, `Q`, `Q-Simple`,
+`DR-S`, `DR-T`, `DR-Q`, `DR-Q-Simple`,
+`DR-S log`, `DR-T log`, `DR-Q log`, `DR-Q-Simple log`.
+
+Available datasets (keys of `datasets.ALL_DATASETS`): seven RCT
+(`H(Conv)`, `Twins`, `Criteo`, `Lenta`, `H(Vis)`, `MegaFon`, `X5`)
+and four observational (`Cattaneo`, `NHEFS`, `JTPA`, `RHC`).
 
 ## Reproducing the paper
 
-Run `Benchmark.ipynb` top-to-bottom. On a workstation the full sweep
-(11 datasets × 17 learners × 25 seeds) takes several hours. The
-notebook is idempotent: on restart it resumes from
-`benchmark_results.csv` and only runs missing (dataset, learner, seed)
-combinations.
+Run `Benchmark.ipynb` top-to-bottom. The full sweep (11 datasets × 15
+learners × 50–500 seeds, with extra seeds added on noisier datasets
+to reach paired-test significance) takes many hours on a workstation.
+The notebook is idempotent: on restart it resumes from
+`benchmark_results.csv` and only runs missing (dataset, learner,
+seed) combinations.
 
 After the sweep, the plotting cells regenerate
 
-- `fig_qini_gap.png` — mean Qini ratio to best learner vs. worst-case
-  Qini ratio across datasets (Figure 1 of the paper).
-- `fig_cal_gap.png` — mean calibration-error ratio vs. worst-case
-  calibration-error ratio across datasets (Figure 2 of the paper).
+- `fig_rct_dots_with_lines.png` — Q-Learner / Q-Simple / S-baseline
+  ratios across the seven RCT datasets, sorted by conversion rate
+  (Figure 1 of the paper).
+- `fig_obs_new_vs_rest.png` — best DR variant vs. best non-DR
+  competitor on the four observational datasets, with R-Learner
+  overlay (Figure 2 of the paper).
+- Per-(learner, dataset) heatmaps for Qini and calibration error
+  (appendix figures).
 
-The final notebook cell emits the three LaTeX tables included in the
-paper's appendix (Qini on RCT, Qini on observational, calibration).
+The final notebook cell emits the LaTeX tables included in the
+paper's appendix (per-dataset Qini and calibration error on RCT and
+observational data).
 
 ## Datasets
 
@@ -169,7 +192,7 @@ well as this paper.
 @article{fuchs2026ratiocate,
   title   = {Beyond Differences: Doubly Robust Meta-Learners for
              Ratio-Based Treatment Effects},
-  author  = {Fuchs, Michael},
+  author  = {Fuchs, Michael and Krei{\ss}, Dominik},
   journal = {arXiv preprint arXiv:XXXX.XXXXX},
   year    = {2026}
 }

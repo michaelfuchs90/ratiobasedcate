@@ -620,57 +620,6 @@ class XLearner(BaseLearner):
         return tau_diff
 
 
-# =============================================================================
-# X-Learner on the Log Scale (no mu0 transform needed)
-# =============================================================================
-class XLearnerLog(BaseLearner):
-    """X-Learner on the log-ratio scale.
-
-    Uses the T-learner log-ratio plug-in as the imputed pseudo-effect
-    for each arm:
-
-        D1_i = log μ̂_1(x_i) - log μ̂_0(x_i)   for treated units
-        D0_i = log μ̂_1(x_i) - log μ̂_0(x_i)   for control units
-
-    Arm-specific models τ̂_1(x), τ̂_0(x) are then fitted on these
-    imputed log-effects and blended with the propensity score.
-    predict() exponentiates — no mu0 transform needed.
-    """
-
-    def __init__(self, random_state=42):
-        self.random_state = random_state
-
-    def fit(self, X, W, Y, propensity=None):
-        self._m1 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
-        self._m0 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
-        self._m1.fit(X[W == 1], Y[W == 1])
-        self._m0.fit(X[W == 0], Y[W == 0])
-
-        mu1 = clip(self._m1.predict_proba(X)[:, 1], CLIP_OUTCOME_PROB)
-        mu0 = clip(self._m0.predict_proba(X)[:, 1], CLIP_OUTCOME_PROB)
-        log_tau_plugin = np.log(mu1) - np.log(mu0)
-        log_tau_plugin = clip(log_tau_plugin, CLIP_LOG_PSEUDO)
-
-        # Imputed log-ratio pseudo-effects: plug-in evaluated at each unit's X
-        D1 = log_tau_plugin[W == 1]
-        D0 = log_tau_plugin[W == 0]
-
-        self._tau1 = lgb.LGBMRegressor(**LGBM_PARAMS, random_state=self.random_state)
-        self._tau0 = lgb.LGBMRegressor(**LGBM_PARAMS, random_state=self.random_state)
-        self._tau1.fit(X[W == 1], D1)
-        self._tau0.fit(X[W == 0], D0)
-
-        self._e_model = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
-        self._e_model.fit(X, W)
-        return self
-
-    def predict_ratio_cate(self, X, propensity=None):
-        e = clip(self._e_model.predict_proba(X)[:, 1], CLIP_PROPENSITY)
-        log_tau1 = clip(self._tau1.predict(X), CLIP_LOG_PSEUDO)
-        log_tau0 = clip(self._tau0.predict(X), CLIP_LOG_PSEUDO)
-        log_tau = e * log_tau0 + (1.0 - e) * log_tau1
-        return clip(np.exp(clip(log_tau, CLIP_LOG_PSEUDO)), CLIP_TAU)
-
 
 class RLearner(BaseLearner):
     """R-Learner with ratio-CATE output. Cross-fits m(x) and e(x) only."""
@@ -718,102 +667,6 @@ class RLearner(BaseLearner):
         return self._final.predict(X)
 
 
-# =============================================================================
-# Log R-Learner
-# =============================================================================
-
-class RLearnerLog(BaseLearner):
-    """R-Learner on the log-ratio scale for binary outcomes.
-
-    Derives from the multiplicative partially linear model:
-
-        log μ_w(x) = log μ_0(x) + W · log τ(x)
-
-    which implies the residualised form:
-
-        L̃_i = log τ(x_i) · W̃_i + ε_i
-
-    where:
-        L̃_i = log μ̂_{W_i}(x_i) - ℓ̂(x_i)       (log-outcome residual)
-        W̃_i = W_i - ê(x_i)                        (treatment residual)
-        ℓ̂(x) = ê(x)·log μ̂_1(x) + (1-ê(x))·log μ̂_0(x)   (marginal log-outcome)
-
-    Because Y ∈ {0,1}, we cannot take log Y directly. Instead we
-    residualise the *model-predicted* log-probability log μ̂_{W_i}(x_i),
-    which is well-defined. This is the standard substitution for binary
-    outcomes in log-linear partially linear models.
-
-    The R-loss on the log scale:
-
-        min_θ Σ_i (L̃_i - θ(x_i)·W̃_i)² · W̃_i²
-
-    gives pseudo-outcome θ̂ = L̃ / W̃ with weights W̃².
-
-    predict() returns τ̂(x) = exp(θ̂(x)), clipped to CLIP_TAU.
-
-    Parameters
-    ----------
-    n_splits : int, default 5
-        Cross-fitting folds for μ̂_1, μ̂_0, ê.
-    random_state : int, default 42
-    """
-
-    def __init__(self, n_splits=5, random_state=42):
-        self.n_splits = n_splits
-        self.random_state = random_state
-
-    def fit(self, X, W, Y, propensity=None):
-        n = len(Y)
-        mu1_cf = np.zeros(n)
-        mu0_cf = np.zeros(n)
-        e_cf   = np.zeros(n)
-
-        kf = KFold(n_splits=self.n_splits, shuffle=True,
-                   random_state=self.random_state)
-        for tr, te in kf.split(X):
-            Xtr, Xte = X.iloc[tr], X.iloc[te]
-            Wtr, Ytr = W[tr], Y[tr]
-
-            m1 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
-            m0 = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
-            m1.fit(Xtr[Wtr == 1], Ytr[Wtr == 1])
-            m0.fit(Xtr[Wtr == 0], Ytr[Wtr == 0])
-            mu1_cf[te] = m1.predict_proba(Xte)[:, 1]
-            mu0_cf[te] = m0.predict_proba(Xte)[:, 1]
-
-            e_model = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=self.random_state)
-            e_model.fit(Xtr, Wtr)
-            e_cf[te] = e_model.predict_proba(Xte)[:, 1]
-
-        mu1_cf = clip(mu1_cf, CLIP_OUTCOME_PROB)
-        mu0_cf = clip(mu0_cf, CLIP_OUTCOME_PROB)
-        e_cf   = clip(e_cf,   CLIP_PROPENSITY)
-
-        # Log-outcome at the observed treatment arm for each unit
-        # log μ̂_{W_i}(x_i): use mu1 where treated, mu0 where control
-        log_mu_obs = np.where(W == 1, np.log(mu1_cf), np.log(mu0_cf))
-
-        # Marginal log-outcome: ê(x)·log μ̂_1(x) + (1-ê(x))·log μ̂_0(x)
-        log_mu_marginal = e_cf * np.log(mu1_cf) + (1.0 - e_cf) * np.log(mu0_cf)
-
-        # Log-outcome residual L̃ and treatment residual W̃
-        L_tilde = log_mu_obs - log_mu_marginal
-        W_tilde = W - e_cf
-
-        # R-loss pseudo-outcome: L̃ / W̃, weighted by W̃²
-        W_tilde_safe = np.where(np.abs(W_tilde) < 1e-3, 1e-3, W_tilde)
-        pseudo = L_tilde / W_tilde_safe
-        pseudo = clip(pseudo, CLIP_LOG_PSEUDO)
-        weights = W_tilde ** 2
-
-        self._final = lgb.LGBMRegressor(**LGBM_PARAMS,
-                                         random_state=self.random_state)
-        self._final.fit(X, pseudo, sample_weight=weights)
-        return self
-
-    def predict_ratio_cate(self, X, propensity=None):
-        log_tau = clip(self._final.predict(X), CLIP_LOG_PSEUDO)
-        return clip(np.exp(log_tau), CLIP_TAU)
 
 
 # =============================================================================
@@ -896,24 +749,27 @@ class DRLearner(BaseLearner):
 # =============================================================================
 # Factory
 # =============================================================================
+# ALL_LEARNER preserves the desired display order:
+# 1. plug-ins (S baseline first), then
+# 2. classical DR (S/T) variants direct then log, then
+# 3. Q-family DR variants direct then log, then
+# 4. difference-targeted comparators (X, R, classical AIPW DR).
 ALL_LEARNER = {
-    's':              lambda rs: SLearner(rs),
-    't':              lambda rs: TLearner(rs),
-    'q':              lambda rs: QLearner(rs),
-    'q_simple':       lambda rs: QSimpleLearner(rs),
-    'drt_log':            lambda rs: DRTLearner(random_state=rs),
-    'drs_log':            lambda rs: DRSLearner(random_state=rs),
-    'drq_log':            lambda rs: DRQLearner(random_state=rs),
-    'drt_direct':     lambda rs: DRTLearner(scale='direct', random_state=rs),
-    'drs_direct':     lambda rs: DRSLearner(scale='direct', random_state=rs),
-    'drq_direct':     lambda rs: DRQLearner(scale='direct', random_state=rs),
-    'drq_simple_log':     lambda rs: DRQSimpleLearner(scale='log', random_state=rs),
-    'drq_simple_direct':  lambda rs: DRQSimpleLearner(scale='direct', random_state=rs),
-    'x':              lambda rs: XLearner(rs),
-    'x_log':          lambda rs: XLearnerLog(rs),
-    'r':              lambda rs: RLearner(random_state=rs),
-    'r_log':            lambda rs: RLearnerLog(random_state=rs),
-    'dr_diff':        lambda rs: DRLearner(random_state=rs),
+    'S':                lambda rs: SLearner(rs),
+    'T':                lambda rs: TLearner(rs),
+    'X':                lambda rs: XLearner(rs),
+    'R':                lambda rs: RLearner(random_state=rs),
+    'DR':               lambda rs: DRLearner(random_state=rs),
+    'Q':                lambda rs: QLearner(rs),
+    'Q-Simple':         lambda rs: QSimpleLearner(rs),
+    'DR-S':             lambda rs: DRSLearner(scale='direct', random_state=rs),
+    'DR-T':             lambda rs: DRTLearner(scale='direct', random_state=rs),
+    'DR-Q':             lambda rs: DRQLearner(scale='direct', random_state=rs),
+    'DR-Q-Simple':      lambda rs: DRQSimpleLearner(scale='direct', random_state=rs),
+    'DR-S log':         lambda rs: DRSLearner(scale='log',    random_state=rs),
+    'DR-T log':         lambda rs: DRTLearner(scale='log',    random_state=rs),
+    'DR-Q log':         lambda rs: DRQLearner(scale='log',    random_state=rs),
+    'DR-Q-Simple log':  lambda rs: DRQSimpleLearner(scale='log',    random_state=rs),
 }
 
 

@@ -131,7 +131,7 @@ def run_benchmark(
                     continue
 
                 # Q-Simple / DR-Q-Simple require known propensity (RCT only)
-                if 'simple' in learner_name and prop_train is None:
+                if 'Simple' in learner_name and prop_train is None:
                     continue
 
                 try:

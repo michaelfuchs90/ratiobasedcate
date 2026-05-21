@@ -547,43 +547,45 @@ def load_jtpa(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
 # Factory
 # =============================================================================
 
-RCT_DATASETS = ['hillstrom_visit', 'hillstrom_conversion', 'criteo', 'megafon', 'x5_retail', 'lenta']
-OBS_DATASETS = ['rhc', 'cattaneo', 'nhefs', 'jtpa']
-SEMI_SYNTHETIC_DATASETS = ['twins']
-ALL_DATASETS = RCT_DATASETS + OBS_DATASETS + SEMI_SYNTHETIC_DATASETS
+# Datasets are listed in ascending order of conversion rate within each group.
+RCT_DATASETS = ['H(Conv)', 'Twins', 'Criteo', 'Lenta', 'H(Vis)', 'MegaFon', 'X5']
+OBS_DATASETS = ['Cattaneo', 'NHEFS', 'JTPA', 'RHC']
+ALL_DATASETS = RCT_DATASETS + OBS_DATASETS
 
 # Marginal conversion rate per dataset, measured on the loaded data
 # (E[Y] over the full sample). Used by analysis code that splits results
 # by conversion-rate regime. Values may differ slightly from the paper's
 # Tables 1 and 2 when the loader binarizes/filters the raw data.
 CONVERSION_RATES = {
-    'hillstrom_visit':      0.147,
-    'hillstrom_conversion': 0.009,
-    'criteo':               0.047,
-    'megafon':              0.204,
-    'x5_retail':            0.620,
-    'lenta':                0.108,
-    'twins':                0.036,
-    'rhc':                  0.649,
-    'cattaneo':             0.060,
-    'nhefs':                0.195,
-    'jtpa':                 0.500,
+    # RCT, ascending
+    'H(Conv)':  0.009,
+    'Twins':    0.036,
+    'Criteo':   0.047,
+    'Lenta':    0.108,
+    'H(Vis)':   0.147,
+    'MegaFon':  0.204,
+    'X5':       0.620,
+    # Observational, ascending
+    'Cattaneo': 0.060,
+    'NHEFS':    0.195,
+    'JTPA':     0.500,
+    'RHC':      0.649,
 }
 
 def get_dataset(name: str, **kwargs) -> UpliftDataset:
     """Load dataset by name."""
     loaders = {
-        'hillstrom_visit': lambda **kw: load_hillstrom('visit', **kw),
-        'hillstrom_conversion': lambda **kw: load_hillstrom('conversion', **kw),
-        'criteo': load_criteo,
-        'megafon': load_megafon,
-        'x5_retail': load_x5_retail,
-        'lenta': load_lenta,
-        'rhc': load_rhc,
-        'twins': load_twins,
-        'cattaneo': load_cattaneo,
-        'nhefs': load_nhefs,
-        'jtpa': load_jtpa,
+        'H(Vis)':   lambda **kw: load_hillstrom('visit', **kw),
+        'H(Conv)':  lambda **kw: load_hillstrom('conversion', **kw),
+        'Criteo':   load_criteo,
+        'MegaFon':  load_megafon,
+        'X5':       load_x5_retail,
+        'Lenta':    load_lenta,
+        'RHC':      load_rhc,
+        'Twins':    load_twins,
+        'Cattaneo': load_cattaneo,
+        'NHEFS':    load_nhefs,
+        'JTPA':     load_jtpa,
     }
 
     if name not in loaders:
