@@ -2,8 +2,8 @@
 Resume-aware benchmark sweep.
 
 Iterates over (dataset, run, learner) combinations, fits each learner,
-and writes per-seed results to a CSV. Re-running the loop resumes from
-the CSV: any (dataset, learner, seed) row already present is skipped.
+and writes per-seed results to a CSV. Re-running resumes from the CSV:
+any (dataset, learner, seed) row already present is skipped.
 
 For each (dataset, seed) we additionally fit a single mu_0 model and use
 it to recover the missing CATE type (ratio <-> difference) for learners
@@ -23,16 +23,10 @@ from learner import get_learner
 from metrics import evaluate_predictions
 
 
-# =============================================================================
-# Config
-# =============================================================================
 LGBM_PARAMS = dict(verbose=-1)
 MU0_FLOOR = 1e-3   # avoids division by ~0 in tau_r = 1 + tau_d / mu_0
 
 
-# =============================================================================
-# mu_0 helpers
-# =============================================================================
 def fit_mu0_predictor(X_train, W_train, Y_train, random_state):
     """Fit mu_0(x) = E[Y | W=0, X=x] on the control arm of the training data."""
     model = lgb.LGBMClassifier(**LGBM_PARAMS, random_state=random_state)
@@ -53,9 +47,6 @@ def recover_cates(tau_r, tau_d, mu0):
     return tau_r, tau_d
 
 
-# =============================================================================
-# Benchmark loop
-# =============================================================================
 def run_benchmark(
     datasets: Iterable[str],
     learners: Iterable[str],
@@ -66,31 +57,11 @@ def run_benchmark(
     existing_results: Optional[List[dict]] = None,
     verbose: bool = True,
 ) -> pd.DataFrame:
-    """Run the benchmark sweep, resuming from `results_csv` if it exists.
+    """Run the benchmark sweep, resuming from ``results_csv`` if it exists.
 
-    Parameters
-    ----------
-    datasets : iterable of str
-        Dataset names; passed to ``get_dataset(name, random_state=seed)``.
-    learners : iterable of str
-        Learner keys; passed to ``get_learner(name, random_state=seed)``.
-    n_runs : int
-        Number of seeds per (dataset, learner).
-    base_seed : int
-        First seed; subsequent seeds are ``base_seed + run_idx``.
-    results_csv : str
-        CSV to read existing results from and write checkpoints to.
-    existing_results : list of dict, optional
-        Pre-loaded results to resume from. Overrides the CSV when given.
-    verbose : bool
-        If True, print resume status and per-error messages.
-
-    Returns
-    -------
-    pd.DataFrame : All results (existing + new), one row per
-                   (dataset, learner, seed).
+    Seeds are ``base_seed + run_idx``. ``existing_results`` overrides the
+    CSV when given. Returns one row per (dataset, learner, seed).
     """
-    # Resume from disk unless caller passed existing results.
     if existing_results is not None:
         results = list(existing_results)
     elif os.path.exists(results_csv):
@@ -112,7 +83,6 @@ def run_benchmark(
         for run_idx in range(n_runs):
             seed = base_seed + run_idx
 
-            # Skip entire seed if all learners already done
             if all((dataset_name, ln, seed) in done for ln in learners):
                 continue
 
@@ -120,7 +90,7 @@ def run_benchmark(
             prop_train = data.propensity_true_train
             prop_test = data.propensity_true_test
 
-            # mu_0 model -- shared across all learners on this (dataset, seed)
+            # mu_0 model — shared across all learners on this (dataset, seed).
             mu0_model = fit_mu0_predictor(
                 data.X_train, data.W_train, data.Y_train, random_state=seed
             )
@@ -130,7 +100,7 @@ def run_benchmark(
                 if (dataset_name, learner_name, seed) in done:
                     continue
 
-                # Q-Simple / DR-Q-Simple require known propensity (RCT only)
+                # Q-Simple / DR-Q-Simple require known propensity (RCT only).
                 if 'Simple' in learner_name and prop_train is None:
                     continue
 
@@ -154,10 +124,6 @@ def run_benchmark(
                         tau_difference_pred=tau_d,
                         W=data.W_test,
                         Y=data.Y_test,
-                        tau_true=(
-                            data.tau_true_test
-                            if data.tau_true is not None else None
-                        ),
                     )
 
                     results.append({
@@ -175,7 +141,7 @@ def run_benchmark(
                               f"{dataset_name} (seed {seed}): {e}")
                     continue
 
-        # Checkpoint after each dataset
+        # Checkpoint after each dataset so a crash doesn't lose all progress.
         pd.DataFrame(results).to_csv(results_csv, index=False)
 
     return pd.DataFrame(results)

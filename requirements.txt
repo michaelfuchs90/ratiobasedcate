@@ -8,8 +8,9 @@ lightgbm==4.6.0
 scikit-uplift==0.5.1
 matplotlib==3.10.9
 tqdm==4.67.3
-# Notebook runtime (pinned exact set; install `notebook` separately if you want the classic Jupyter UI):
+# Notebook runtime (pinned exact set):
 ipykernel==7.1.0
 ipython==9.8.0
 jupyter_client==8.7.0
 jupyter_core==5.8.1
+notebook   # AUTHOR-TODO: replace with `notebook==<version>` from your `pip freeze`.

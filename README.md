@@ -69,7 +69,6 @@ dataset loaders), [`lightgbm`](https://lightgbm.readthedocs.io/), and
 
 ```
 learner.py             15 learner implementations (S/T/Q/X/R/DR and DR-S/T/Q/Q-Simple in direct + log variants)
-calibration.py         Rank-preserving log-linear calibration
 metrics.py             Qini and multiplicative calibration error (ratio + difference scales)
 datasets.py            Loaders for 11 benchmark datasets
 benchmark.py           Per-seed benchmark loop with idempotent CSV checkpointing
@@ -152,12 +151,18 @@ semi-synthetic.
 | Criteo             | [Diemert et al. 2018][diemert]                | display advertising |
 | MegaFon            | [MegaFon 2019][megafon]                       | telecom uplift challenge |
 | X5 Retail          | [X5 Retail 2020][x5]                          | retail personalisation challenge |
-| Lenta              | [Lenta 2021][lenta]                           | retail uplift |
 
 [hillstrom]: https://blog.minethatdata.com/2008/03/minethatdata-e-mail-analytics-and-data.html
 [diemert]: https://ailab.criteo.com/criteo-uplift-prediction-dataset/
 [megafon]: https://ods.ai/competitions/megafon-df21-chegg
 [x5]: https://ods.ai/competitions/x5-retailhero-uplift-modeling
+
+### Manual download required
+
+| Dataset | Source | Notes |
+|---------|--------|-------|
+| Lenta   | [Lenta 2021][lenta] | The ~140 MB CSV is not redistributed in this repo. Download `lenta_dataset.csv.gz` from <https://sklift.s3.eu-west-2.amazonaws.com/lenta_dataset.csv.gz> and place it in `data/raw/`. |
+
 [lenta]: https://www.uplift-modeling.com/en/latest/api/datasets/fetch_lenta.html
 
 ### Redistributed in `data/raw/`

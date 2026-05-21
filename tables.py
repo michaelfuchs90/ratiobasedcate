@@ -1,42 +1,26 @@
 """
 LaTeX table generation for benchmark metrics.
 
-`make_metric_table` produces a per-dataset LaTeX table for any metric
-(Qini ratio, Qini difference, CalError ratio, CalError difference).
-
-The body of the paper measures learner performance via the per-dataset
-ratio R_l(d) = Q_l(d) / Q_S(d) (S-Learner as baseline) and refrains
-from cross-dataset aggregation. These tables therefore report raw
-per-dataset values without aggregate summary columns; aggregation is
-deliberately deferred to the heatmaps in the body.
-
-Display labels for learners and datasets are stored directly in
-``df_results``; this module no longer translates internal keys to
-display names.
+Tables report raw per-dataset values without aggregate summary columns;
+the paper deliberately defers cross-dataset aggregation to the heatmaps
+in the body.
 """
 
-from typing import Optional
+from typing import List, Optional
 
 import pandas as pd
 
 from learner import ALL_LEARNER
-from visualization import MetricSpec, METRIC_SPECS
+from visualization import MetricLike, MetricSpec, METRIC_SPECS  # noqa: F401  (MetricSpec re-exported)
 
 
-# =============================================================================
-# Default display ordering for the learner column
-# =============================================================================
-# The factory in learner.py is already in display order; mirror it here.
+# Mirrors the display order of the learner factory.
 LEARNER_ORDER_DEFAULT = list(ALL_LEARNER.keys())
 
-# After how many learners to insert a horizontal rule
-# (after the four plug-ins: S, T, Q, Q-Simple).
+# Horizontal rule after the four plug-ins (S, T, Q, Q-Simple).
 HLINE_AFTER_DEFAULT = 4
 
 
-# =============================================================================
-# Helpers
-# =============================================================================
 def _fmt_value(v: float, bold: bool, allow_negative: bool = True) -> str:
     """Format a numeric cell, optionally bold-faced for the per-column best."""
     if pd.isna(v):
@@ -48,49 +32,21 @@ def _fmt_value(v: float, bold: bool, allow_negative: bool = True) -> str:
     return f'\\textbf{{{s}}}' if bold else s
 
 
-# =============================================================================
-# Public API
-# =============================================================================
 def make_metric_table(
     df_results: pd.DataFrame,
-    metric,
-    datasets: list,
+    metric: MetricLike,
+    datasets: List[str],
     caption: str,
     label: str,
     *,
-    learner_order: Optional[list] = None,
+    learner_order: Optional[List[str]] = None,
     hline_after: int = HLINE_AFTER_DEFAULT,
 ) -> str:
     """Build a per-dataset LaTeX table.
 
-    Layout:
-        Learner | ds_1 | ds_2 | ... | ds_n
-        --------+------+------+-----+------
-        S       | val  | val  | ... | val
-                | (se) | (se) | ... | (se)
-        T       | ...
-
-    Parameters
-    ----------
-    df_results : pd.DataFrame
-        Per-seed benchmark results, with ``learner`` and ``dataset``
-        columns already containing display labels.
-    metric : str | MetricSpec
-        Metric key (e.g. ``'qini_ratio'``) or a ``MetricSpec``.
-    datasets : list of str
-        Display labels of datasets to include as columns, in display order.
-    caption, label : str
-        LaTeX caption and label.
-    learner_order : list of str, optional
-        Display labels in the order they should appear. Labels not present
-        in the data are skipped silently. Defaults to the order in
-        ``learner.ALL_LEARNER``.
-    hline_after : int
-        Insert a horizontal rule after this many learners.
-
-    Returns
-    -------
-    str : LaTeX source for the table.
+    Each cell shows mean ± SE per (learner, dataset). The per-column best
+    is bold-faced; ``learner_order`` defaults to ``ALL_LEARNER`` order.
+    ``metric`` may be a key (e.g. ``'qini_ratio'``) or a ``MetricSpec``.
     """
     spec = METRIC_SPECS[metric] if isinstance(metric, str) else metric
     learner_order = learner_order or LEARNER_ORDER_DEFAULT
@@ -103,7 +59,6 @@ def make_metric_table(
     ds_order = [d for d in datasets if d in means.columns]
     ds_headers = ' & '.join(ds_order)
 
-    # Per-dataset best learner (for column-wise bolding)
     if spec.direction == 'max':
         best_per_ds = {d: means[d].idxmax() for d in ds_order}
     else:

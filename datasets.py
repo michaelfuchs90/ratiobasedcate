@@ -1,7 +1,8 @@
 """
-Datasets for Q-Learner Benchmark
-================================
-Real-world and synthetic datasets for CATE estimation evaluation.
+Dataset loaders for the ratio-CATE benchmark.
+
+Provides 7 RCT/semi-synthetic and 4 observational datasets through a common
+``UpliftDataset`` container with pre-computed train/test splits.
 """
 
 import re
@@ -16,9 +17,6 @@ CACHE_DIR = Path("data/processed")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# =============================================================================
-# Data Container
-# =============================================================================
 @dataclass
 class UpliftDataset:
     """Container for uplift modeling data with train/test splits."""
@@ -59,11 +57,8 @@ class UpliftDataset:
             self.propensity_true_train, self.propensity_true_test = self.propensity_true[idx_train], self.propensity_true[idx_test]
 
 
-# =============================================================================
-# Utilities
-# =============================================================================
 def _prepare_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert object/string columns to category dtype for LightGBM."""
+    """Convert object/string columns to category dtype for LightGBM and sanitise column names."""
     df = df.copy()
     df = df.loc[:, ~df.columns.str.startswith('Unnamed')]
     df.columns = [re.sub(r'[{}\[\]"\\,:]', '_', c) for c in df.columns]
@@ -74,23 +69,21 @@ def _prepare_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _load_or_fetch(name: str, fetch_fn) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
-    """Load from feather cache or fetch and save."""
+    """Load from feather cache or fetch via ``fetch_fn`` and persist for next time."""
     path = CACHE_DIR / f"{name}.feather"
 
     if path.exists():
         df = pd.read_feather(path)
         W = df.pop('__W__').to_numpy(dtype=np.int32)
         Y = df.pop('__Y__').to_numpy(dtype=np.int32)
-        # Restore category dtypes
         df = _prepare_features(df)
         return df, W, Y
 
     X, W, Y = fetch_fn()
     X = _prepare_features(X)
 
-    # Save to cache
+    # Feather cannot store categoricals with mixed types — coerce to string.
     df_save = X.copy()
-    # Convert categories to string for feather compatibility
     for col in df_save.columns:
         if df_save[col].dtype.name == 'category':
             df_save[col] = df_save[col].astype(str)
@@ -101,27 +94,22 @@ def _load_or_fetch(name: str, fetch_fn) -> tuple[pd.DataFrame, np.ndarray, np.nd
     return X, W, Y
 
 
-# =============================================================================
-# Real-World Datasets
-# =============================================================================
 def load_hillstrom(outcome: str = 'visit', test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
     """Hillstrom Email Marketing Dataset."""
 
     def fetch():
         from sklift.datasets import fetch_hillstrom
 
-        # IMPORTANT: pass target_col so the requested outcome is loaded.
+        # target_col selects which outcome (visit / conversion / spend) is loaded.
         bunch = fetch_hillstrom(target_col=outcome)
 
         df = bunch['data'].copy()
         treatment = bunch['treatment']
         target = bunch['target']
 
-        # Attach treatment to the dataframe for filtering.
         df['treatment'] = treatment
         df['target'] = target
 
-        # Keep only the relevant treatment arms.
         mask = df['treatment'].isin(['Mens E-Mail', 'Womens E-Mail', 'No E-Mail'])
         df = df[mask]
 
@@ -129,7 +117,6 @@ def load_hillstrom(outcome: str = 'visit', test_size: float = 0.2, random_state:
         Y = df['target'].values
 
         feature_cols = ['recency', 'history', 'mens', 'womens', 'newbie', 'channel', 'zip_code']
-        # Also include history_segment if available.
         if 'history_segment' in df.columns:
             feature_cols.append('history_segment')
 
@@ -177,22 +164,20 @@ def load_megafon(test_size: float = 0.2, random_state: int = 42) -> UpliftDatase
     return UpliftDataset(X=X, W=W, Y=Y, propensity_true=e, name='megafon', test_size=test_size, random_state=random_state)
 
 def load_x5_retail(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
-    """X5 RetailHero Dataset - SMS promotion campaign."""
+    """X5 RetailHero Dataset — SMS promotion campaign."""
 
     def fetch():
         from sklift.datasets import fetch_x5
         data = fetch_x5()
 
-        # data['data'] ist ein Bunch mit clients, train, purchases
+        # data['data'] is a Bunch of {clients, train, purchases}.
         clients = data['data']['clients'].copy()
         train = data['data']['train'].copy()
         purchases = data['data']['purchases'].copy()
 
-        # Treatment and target are directly available.
         W = data['treatment'].values
         Y = data['target'].values
 
-        # Aggregate purchase features
         purchase_agg = purchases.groupby('client_id').agg(
             n_purchases=('transaction_id', 'count'),
             total_spent=('purchase_sum', 'sum'),
@@ -201,12 +186,10 @@ def load_x5_retail(test_size: float = 0.2, random_state: int = 42) -> UpliftData
             n_products=('product_id', 'nunique'),
         ).reset_index()
 
-        # Merge all data
         df = train.merge(clients, on='client_id', how='left')\
                   .merge(purchase_agg, on='client_id', how='left')\
                   .fillna(0)
 
-        # Select features (exclude IDs and targets)
         exclude = {'client_id', 'treatment_flg', 'target', 'first_issue_date', 'first_redeem_date'}
         X = df[[c for c in df.columns if c not in exclude]]
 
@@ -217,22 +200,17 @@ def load_x5_retail(test_size: float = 0.2, random_state: int = 42) -> UpliftData
     return UpliftDataset(X=X, W=W, Y=Y, propensity_true=e, name='x5_retail', test_size=test_size, random_state=random_state)
 
 
-# =============================================================================
-# Additional Real-World / Semi-Synthetic Datasets
-# =============================================================================
 RAW_DIR = CACHE_DIR.parent / "raw"
 
 
 def load_twins(n_bins_tau: int = 50, test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
     """Twins semi-synthetic dataset (Louizos et al., 2017).
 
-    Both potential outcomes observed → ground truth tau available.
-    Treatment is simulated: W ~ Bernoulli(0.5).
-    Source: https://github.com/AMLab-Amsterdam/CEVAE
+    Both potential outcomes are observed, so τ is known. Treatment is
+    simulated: W ~ Bernoulli(0.5). Source: https://github.com/AMLab-Amsterdam/CEVAE
     """
     rng = np.random.RandomState(random_state)
 
-    # --- locate files (3-file CEVAE format or single combined CSV) ---
     x_path = RAW_DIR / "twin_pairs_X_3years_samesex.csv"
     y_path = RAW_DIR / "twin_pairs_Y_3years_samesex.csv"
     t_path = RAW_DIR / "twin_pairs_T_3years_samesex.csv"
@@ -243,7 +221,7 @@ def load_twins(n_bins_tau: int = 50, test_size: float = 0.2, random_state: int =
         df_y = pd.read_csv(y_path, index_col=0)
         Y0 = df_y['mort_0'].values.astype(int)
         Y1 = df_y['mort_1'].values.astype(int)
-        # T file contains birth weights (covariates), not treatment assignment
+        # NB: the "T" CEVAE file holds birth weights (covariates), not treatment.
         if t_path.exists():
             df_t = pd.read_csv(t_path, index_col=0)
             df_x = pd.concat([df_x, df_t], axis=1)
@@ -267,18 +245,18 @@ def load_twins(n_bins_tau: int = 50, test_size: float = 0.2, random_state: int =
             "Source: https://github.com/AMLab-Amsterdam/CEVAE"
         )
 
-    # Drop rows with missing outcomes
     valid = np.isfinite(Y0) & np.isfinite(Y1)
     X, Y0, Y1 = X.loc[valid].reset_index(drop=True), Y0[valid], Y1[valid]
 
     X = _prepare_features(X)
 
-    # --- simulate treatment (RCT-like, e = 0.5) ---
+    # Simulated RCT, e ≡ 0.5.
     W = rng.binomial(1, 0.5, size=len(Y0))
     Y = np.where(W == 1, Y1, Y0)
     e_x = np.full(len(W), 0.5)
 
-    # --- compute ground truth tau via binning ---
+    # Ground-truth τ approximated as the empirical ratio in covariate-score bins;
+    # bins with <5 obs fall back to τ=1 to avoid noisy ratios.
     X_num = X.select_dtypes(include=[np.number])
     score = ((X_num - X_num.mean()) / X_num.std().clip(lower=1e-8)).sum(axis=1).values
     bin_edges = np.percentile(score, np.linspace(0, 100, n_bins_tau + 1))
@@ -297,14 +275,20 @@ def load_twins(n_bins_tau: int = 50, test_size: float = 0.2, random_state: int =
 
 
 def load_lenta(sample_frac: float = 1, test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
-    """Lenta grocery retail uplift dataset (Kaggle RCT)."""
+    """Lenta grocery retail uplift dataset (Kaggle RCT).
+
+    The raw CSV is ~140 MB and is not redistributed in this repo. Download
+    lenta_dataset.csv.gz from
+    https://sklift.s3.eu-west-2.amazonaws.com/lenta_dataset.csv.gz
+    and place it in data/raw/ before running.
+    """
     def fetch():
         candidates = [RAW_DIR / "lenta_dataset.csv.gz", RAW_DIR / "lenta_dataset.csv",
                       RAW_DIR / "lenta.csv", Path("lenta_dataset.csv")]
         path = next((p for p in candidates if p.exists()), None)
         if path is None:
             raise FileNotFoundError(
-                f"Lenta data not found. Place lenta_dataset.csv in {RAW_DIR}/.\n"
+                f"Lenta data not found. Place lenta_dataset.csv.gz in {RAW_DIR}/.\n"
                 "Source: https://sklift.s3.eu-west-2.amazonaws.com/lenta_dataset.csv.gz"
             )
 
@@ -312,17 +296,14 @@ def load_lenta(sample_frac: float = 1, test_size: float = 0.2, random_state: int
         cols_lower = {c: c.lower().strip() for c in df.columns}
         df.rename(columns=cols_lower, inplace=True)
 
-        # Detect treatment column
         treat_col = next((c for c in df.columns if c in ('group', 'treatment_flg', 'treatment')), None)
         if treat_col is None:
             raise ValueError(f"Cannot detect treatment column. Found: {list(df.columns)}")
 
-        # Detect outcome column
         outcome_col = next((c for c in df.columns if c in ('response_att', 'target', 'response')), None)
         if outcome_col is None:
             raise ValueError(f"Cannot detect outcome column. Found: {list(df.columns)}")
 
-        # Treatment: map string labels to 0/1 if needed
         if df[treat_col].dtype == object or pd.api.types.is_string_dtype(df[treat_col]):
             W = df[treat_col].map({'test': 1, 'treatment': 1, 'control': 0}).values
         else:
@@ -330,11 +311,9 @@ def load_lenta(sample_frac: float = 1, test_size: float = 0.2, random_state: int
 
         Y = df[outcome_col].astype(int).values
 
-        # Features: everything except treatment and outcome
         exclude = {treat_col, outcome_col}
         X = df[[c for c in df.columns if c not in exclude]].copy()
 
-        # Sample down (dataset is very large)
         rng = np.random.RandomState(random_state)
         idx = rng.choice(len(Y), size=int(len(Y) * sample_frac), replace=False)
         return _prepare_features(X.iloc[idx].reset_index(drop=True)), W[idx], Y[idx]
@@ -360,7 +339,7 @@ def load_rhc(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
         cols_lower = {c: c.lower().strip() for c in df.columns}
         df.rename(columns=cols_lower, inplace=True)
 
-        # Treatment: swang1 = 'RHC' vs 'No RHC'
+        # Treatment: swang1 ∈ {'RHC', 'No RHC'}.
         treat_col = next((c for c in df.columns if c in ('swang1', 'rhc', 'treatment')), None)
         if treat_col is None:
             raise ValueError(f"Cannot detect treatment column. Found: {list(df.columns)}")
@@ -370,7 +349,7 @@ def load_rhc(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
         else:
             W = df[treat_col].astype(int).values
 
-        # Outcome: prefer dth30 (30-day mortality); fallback to death
+        # Outcome: prefer 30-day mortality (dth30); fall back to overall death.
         outcome_col = next((c for c in df.columns if c in ('dth30', 'death', 'dth')), None)
         if outcome_col is None:
             raise ValueError(f"Cannot detect outcome column. Found: {list(df.columns)}")
@@ -382,7 +361,7 @@ def load_rhc(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
         else:
             Y = df[outcome_col].astype(int).values
 
-        # Features: exclude IDs, treatment, outcome, survival time
+        # Drop IDs and post-treatment / survival-time columns to avoid leakage.
         exclude = {treat_col, outcome_col, 'ptid', 'surv2md1', 't3d30', 'dth30', 'death',
                    'unnamed: 0', ''}
         feature_cols = [c for c in df.columns if c not in exclude and c.strip() != '']
@@ -390,7 +369,6 @@ def load_rhc(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
         return _prepare_features(X), W, Y
 
     X, W, Y = _load_or_fetch('rhc', fetch)
-    # Observational → propensity unknown, will be estimated by learners
     return UpliftDataset(X=X, W=W, Y=Y, propensity_true=None, name='rhc',
                          test_size=test_size, random_state=random_state)
 
@@ -419,7 +397,7 @@ def load_cattaneo(test_size: float = 0.2, random_state: int = 42) -> UpliftDatas
         cols_lower = {c: c.lower().strip() for c in df.columns}
         df.rename(columns=cols_lower, inplace=True)
 
-        # Treatment: mbsmoke (maternal smoking)
+        # Treatment: mbsmoke (maternal smoking).
         treat_col = next((c for c in df.columns if c in ('mbsmoke', 'smoke', 'treatment')), None)
         if treat_col is None:
             raise ValueError(f"Cannot detect treatment column. Found: {list(df.columns)}")
@@ -430,7 +408,7 @@ def load_cattaneo(test_size: float = 0.2, random_state: int = 42) -> UpliftDatas
         else:
             W = df[treat_col].astype(int).values
 
-        # Outcome: low birth weight (lbweight or bweight < 2500)
+        # Outcome: low birth weight (use lbweight if present, else threshold bweight at 2500g).
         if 'lbweight' in df.columns:
             Y = df['lbweight'].astype(int).values
         elif 'bweight' in df.columns:
@@ -438,7 +416,7 @@ def load_cattaneo(test_size: float = 0.2, random_state: int = 42) -> UpliftDatas
         else:
             raise ValueError(f"Cannot detect outcome column. Found: {list(df.columns)}")
 
-        # Features: exclude treatment, outcome, and smoking intensity (perfectly predicts treatment)
+        # msmoke (smoking intensity) perfectly predicts treatment → exclude.
         exclude = {treat_col, 'lbweight', 'bweight', 'msmoke'}
         feature_cols = [c for c in df.columns if c not in exclude and c.strip() != '']
         X = df[feature_cols].copy()
@@ -473,25 +451,22 @@ def load_nhefs(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
         cols_lower = {c: c.lower().strip() for c in df.columns}
         df.rename(columns=cols_lower, inplace=True)
 
-        # Treatment: qsmk (quit smoking)
         treat_col = next((c for c in df.columns if c in ('qsmk', 'quit_smoking', 'treatment')), None)
         if treat_col is None:
             raise ValueError(f"Cannot detect treatment column. Found: {list(df.columns)}")
         W = df[treat_col].astype(int).values
 
-        # Outcome: death
         outcome_col = next((c for c in df.columns if c in ('death', 'died', 'y')), None)
         if outcome_col is None:
             raise ValueError(f"Cannot detect outcome column. Found: {list(df.columns)}")
         Y = df[outcome_col].astype(int).values
 
-        # Features: exclude treatment, outcome, IDs, post-treatment vars
+        # IDs and post-treatment columns dropped to avoid leakage.
         exclude = {treat_col, outcome_col, 'seqn', 'id', 'wt82', 'wt82_71',
                    'yrdth', 'modth', 'dadth', 'smkintensity82_71', 'censored'}
         feature_cols = [c for c in df.columns if c not in exclude and c.strip() != '']
         X = df[feature_cols].copy()
 
-        # Drop rows with missing outcome or treatment
         valid = np.isfinite(W) & np.isfinite(Y)
         X, W, Y = X.loc[valid].reset_index(drop=True), W[valid], Y[valid]
         return _prepare_features(X), W, Y
@@ -525,13 +500,11 @@ def load_jtpa(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
         cols_lower = {c: c.lower().strip() for c in df.columns}
         df.rename(columns=cols_lower, inplace=True)
 
-        # Treatment: actual participation D2 (observational, confounded)
+        # D2 is actual participation (confounded); D1/Z1/Z2 are random offer / instruments
+        # and Y1/earnings are post-treatment — all excluded so only pre-treatment X remains.
         W = df['d2'].astype(int).values
-        # Outcome: employed Y2
         Y = df['y2'].astype(int).values
 
-        # Features: pre-treatment covariates only
-        # Exclude instruments (z1, z2), treatments (d1, d2), outcomes (y1, y2), post-treatment earnings
         exclude = {'z1', 'z2', 'd1', 'd2', 'y1', 'y2', 'earnings'}
         feature_cols = [c for c in df.columns if c not in exclude]
         X = df[feature_cols].copy()
@@ -543,19 +516,15 @@ def load_jtpa(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
                          test_size=test_size, random_state=random_state)
 
 
-# =============================================================================
-# Factory
-# =============================================================================
-
 # Datasets are listed in ascending order of conversion rate within each group.
 RCT_DATASETS = ['H(Conv)', 'Twins', 'Criteo', 'Lenta', 'H(Vis)', 'MegaFon', 'X5']
 OBS_DATASETS = ['Cattaneo', 'NHEFS', 'JTPA', 'RHC']
 ALL_DATASETS = RCT_DATASETS + OBS_DATASETS
 
-# Marginal conversion rate per dataset, measured on the loaded data
-# (E[Y] over the full sample). Used by analysis code that splits results
-# by conversion-rate regime. Values may differ slightly from the paper's
-# Tables 1 and 2 when the loader binarizes/filters the raw data.
+# Marginal conversion rate (E[Y] over the full sample) per dataset.
+# Used by analysis code that splits results by conversion-rate regime.
+# Values may differ slightly from paper Tables 1/2 due to loader-level
+# binarisation / filtering.
 CONVERSION_RATES = {
     # RCT, ascending
     'H(Conv)':  0.009,
