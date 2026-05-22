@@ -464,8 +464,8 @@ vanishes, so for large datasets the computational savings from skipping
 propensity estimation may outweigh the small variance cost.
 
 Section~\ref{sec:experiments} confirms that the Q-Learner outperforms
-Q-Simple, although on most datasets the gap is small (see
-Figure~\ref{fig:rct-conversion-gradient}). For applications where
+Q-Simple, although on all but one dataset the gap is small (see
+Appendix~\ref{app:sec:full-results}). For applications where
 computational efficiency matters or where only converter data is
 available, Q-Simple therefore remains a competitive choice on most
 RCTs.
@@ -908,69 +908,84 @@ We evaluate which learners most consistently achieve near-optimal
 ranking performance, measured by $R_l(d) = \mathrm{Qini}_l(d) /
 \mathrm{Qini}_S(d)$ relative to the S-Learner baseline. The two data
 regimes behave differently enough that we present them separately:
-RCTs in Figure~\ref{fig:rct-conversion-gradient} (sorted by
-conversion rate) and observational datasets in
-Figure~\ref{fig:obs-new-vs-rest}. Full per-dataset Qini values and
-heatmaps are provided in Appendix~\ref{app:sec:full-results}.
+RCTs in Section~\ref{sec:ranking-rct} and observational datasets in
+Section~\ref{sec:ranking-obs}.
 
 \subsubsection{RCT Datasets}
+\label{sec:ranking-rct}
 
 On RCT data the best learner varies heavily across datasets, so for
 optimal results all candidates should be checked. Still, clear
-patterns emerge from
-Figure~\ref{fig:rct-conversion-gradient} (full per-dataset values and
-a heatmap in Appendix~\ref{app:sec:full-results}) that suggest
-standard procedures for the practitioner.
-
-\paragraph{No structural advantage for DR.}
-Without confounding, DR augmentation is not structurally
-advantageous: although a DR variant occasionally takes the top spot,
-no DR learner is consistently ahead of the leading plug-in. The
-theoretical reading is that when propensity is known by design and
-no confounding can arise, plug-in learners already identify the
-CATE, and the DR correction trades a small bias gain against added
-estimation variance.
-
-\paragraph{High CVR: standard ML suffices.}
-On the three high-conversion datasets (X5, MegaFon, Criteo), the
-S-Learner sits within a hair of the dataset winner. Causal
-meta-learners sometimes edge it out, but only slightly. Apparently,
-without the imbalance problem that motivates ratio-CATEs, an
-out-of-the-box GBM is enough.
-
-\paragraph{Low CVR: Q is the most consistent choice.}
-On the four low-conversion datasets (H(Conv), Twins, Criteo, Lenta),
-the Q-Learner significantly beats the S-Learner on three out of
-four. The single exception is Twins, where Q sits at $0.82$ of the
-dataset best---a significant loss against S, but small in absolute
-terms. Only two other learners match Q's win count: DR-Q-Simple
-(three significant wins) and X (two wins, one tie). But when
-comparing the actual ratios, Q is clearly ahead of both: averaged
-across the four low-conversion datasets, $\mathrm{Qini}_l /
-\mathrm{Qini}_{\max}$ is $0.83$ for Q against $0.64$ for DR-Q-Simple
-and $0.62$ for X, reflecting the visibly larger swings of the latter
-two across datasets.
+patterns emerge that suggest standard procedures for the
+practitioner. Underlying per-dataset values and heatmaps are deferred
+to Appendix~\ref{app:sec:full-results}.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=1\textwidth]{fig_rct_dots_with_lines.png}
+\includegraphics[width=1\textwidth]{fig_rct_dots.png}
 \caption{$\mathrm{Qini}_l / \mathrm{Qini}_S$ across the seven RCT
-datasets, sorted by conversion rate (low to high). Q-Learner and
-Q-Simple are highlighted as coloured lines; the remaining
-non-baseline learners appear as a dot cloud, grouped by family.
-DR-Q-Simple and X are overlaid as thin grey lines for context. The
-dashed vertical line separates the four low-conversion datasets
-(left) from the three high-conversion ones (right). The S-Learner
-baseline is the red line at $1$.}
-\label{fig:rct-conversion-gradient}
+datasets, sorted by conversion rate (low to high). Each dot is one
+non-baseline learner, coloured by group: ``DR methods'' pools every
+DR variant in our suite (the difference-CATE plug-in DR together with
+the ratio-DR family DR-S/T/Q and their log/Simple variants);
+``non-DR methods'' contains the plug-in T, X, R, Q, and Q-Simple. The
+per-dataset best non-S learner is labelled by name. The dashed
+vertical line separates the four low-conversion datasets (left) from
+the three high-conversion ones (right). The S-Learner baseline is
+the red line at $1$.}
+\label{fig:rct-dr-vs-nondr}
 \end{figure}
 
+\paragraph{DR is not necessary on RCTs.}
+Figure~\ref{fig:rct-dr-vs-nondr} shows the DR and non-DR clouds
+overlapping on every dataset: a DR variant occasionally takes the
+top spot, but neither group is consistently ahead of the other.
+Theory predicts exactly this: when propensity is known by design and
+no confounding can arise, plug-in learners already identify the
+CATE, so the DR correction has no structural advantage to offer.
+
+\paragraph{High CVR: standard ML suffices.}
+On the three high-conversion datasets (X5, MegaFon, Criteo) in the
+right panel of Figure~\ref{fig:rct-dr-vs-nondr}, the S-Learner sits
+within a hair of the dataset winner. Causal meta-learners sometimes
+edge S out, but only slightly. Without the imbalance problem that
+motivates ratio-CATEs, an out-of-the-box GBM is enough.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=1\textwidth]{fig_rct_learners.png}
+\caption{$\mathrm{Qini}_l / \mathrm{Qini}_S$ on the four
+low-conversion RCT datasets (H(Conv), Twins, Criteo, Lenta).
+Q-Learner, X-Learner, and DR-Q-Simple are highlighted as coloured
+lines to track their per-dataset behaviour; the remaining
+non-baseline learners are pooled into a single grey ``other'' cloud
+that locates the three featured learners against the rest of the
+suite. The S-Learner baseline is the red line at $1$.}
+\label{fig:rct-low-cvr-learners}
+\end{figure}
+
+\paragraph{Low CVR: Q is the most consistent choice.}
+Figure~\ref{fig:rct-low-cvr-learners} zooms in on the regime where
+ratio-CATEs are most valuable. The Q-Learner significantly beats the
+S-Learner on three of the four low-conversion datasets; the single
+exception is Twins, where Q sits at $0.82$ of the dataset best --- a
+significant loss against S, but small in absolute terms. Only two
+other learners match Q's win count: DR-Q-Simple (three significant
+wins) and X (two wins, one tie). But when comparing the actual
+ratios, Q is clearly ahead of both: averaged across the four
+low-conversion datasets, $\mathrm{Qini}_l / \mathrm{Qini}_{\max}$ is
+$0.83$ for Q against $0.64$ for DR-Q-Simple and $0.62$ for X,
+reflecting the visibly larger swings of the latter two across
+datasets.
+
 \paragraph{Q-Learner vs.\ Q-Simple.}
-On six of seven RCTs Q-Simple matches the full Q-Learner closely.
-The single exception is Lenta, where Q-Simple's Qini collapses to
-essentially zero while Q reaches $0.089$. Outside of this failure
-mode Q-Simple remains a competitive, computationally cheaper
-alternative when known propensity makes it applicable.
+The per-dataset values in Appendix~\ref{app:sec:full-results} show
+that on six of seven RCTs Q-Simple matches the full Q-Learner
+closely. The single exception is
+Lenta, where Q-Simple's Qini collapses to essentially zero while Q
+reaches $0.089$. Outside of this failure mode Q-Simple remains a
+competitive, computationally cheaper alternative when known
+propensity makes it applicable.
 
 \subsubsection{Observational Datasets}
 \label{sec:ranking-obs}
@@ -1065,6 +1080,10 @@ the following default choices:
     \item \textbf{RCT, low conversion rate:} Q-Learner.
     \item \textbf{Observational data:} one of DR-S / DR-T / DR-Q
     (log-scale at low conversion, direct-scale otherwise).
+    \item \textbf{When calibration must be correct out of the box} and
+    no post-hoc recalibration of the chosen learner is desired: the
+    S-Learner is the safe default, since it is the best- or
+    near-best-calibrated method on every dataset we evaluated.
 \end{itemize}
 
 \paragraph{Limitations.}
@@ -1356,11 +1375,14 @@ not statistically distinguishable from S at $z = 1.96$.}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{fig_heatmap_qini_ratio_obs.png}
+\includegraphics[width=0.6\textwidth]{fig_heatmap_qini_ratio_obs.png}
 \caption{Per-(learner, dataset) heatmap of $\mathrm{Qini}_l /
 \mathrm{Qini}_S$ on the four observational datasets, sorted by
-ascending conversion rate. Conventions as in
-Figure~\ref{fig:heatmap-qini-rct}.}
+ascending conversion rate. Green cells indicate that the learner beats
+the S-Learner; red cells indicate the opposite; neutral grey cells are
+not statistically distinguishable from S at $z = 1.96$ (paired test).
+Cells where the learner's Qini is negative are flagged in deep red
+(``Qini~$<$~0''), since the ratio breaks down.}
 \label{fig:heatmap-qini-obs}
 \end{figure}
 

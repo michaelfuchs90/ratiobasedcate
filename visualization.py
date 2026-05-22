@@ -11,11 +11,13 @@ R_l > 1 means better than the S baseline (for Qini) or worse (for
 CalError); R_l < 1 means the opposite.
 """
 
+import colorsys
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from matplotlib.colors import TwoSlopeNorm
 from matplotlib.figure import Figure
@@ -299,6 +301,45 @@ def plot_heatmap(
     return fig, ratio
 
 
+def _desaturate(color, saturation: float = 0.45, lightness_boost: float = 0.10):
+    """Mute a colour by lowering HLS saturation and brightening slightly."""
+    r, g, b = mcolors.to_rgb(color)
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    s = max(0.0, min(1.0, s * saturation))
+    l = max(0.0, min(1.0, l + lightness_boost))
+    return colorsys.hls_to_rgb(h, l, s)
+
+
+def _shade_good_bad(ax, *, direction: str, baseline_y: float = 1.0,
+                    good_color: str = '#2ca02c', bad_color: str = '#d62728',
+                    alpha: float = 0.06) -> None:
+    """Tint the background green on the "better than baseline" side and red on
+    the "worse" side. Direction='max' ⇒ y > baseline is good (green above);
+    direction='min' ⇒ y < baseline is good (green below).
+
+    Call after data is plotted so ``ax.get_ylim()`` reflects autoscale.
+    """
+    ymin, ymax = ax.get_ylim()
+    good_top, bad_bot = (ymax, ymin) if direction == 'max' else (ymin, ymax)
+    good_bot, bad_top = (baseline_y, baseline_y)
+    ax.axhspan(min(good_bot, good_top), max(good_bot, good_top),
+               facecolor=good_color, alpha=alpha, zorder=0)
+    ax.axhspan(min(bad_bot, bad_top), max(bad_bot, bad_top),
+               facecolor=bad_color, alpha=alpha, zorder=0)
+    ax.set_ylim(ymin, ymax)
+
+
+# Learners that keep their full saturation. S is the baseline (drawn as the
+# red reference line, not as a coloured series), so only Q stays vivid.
+_VIVID_LEARNERS = frozenset({'Q'})
+
+# Lower bound for the log-scale y-axis in plot_dots_with_lines. A handful of
+# learners (e.g. DR-Q on Twins) dip an order of magnitude below the next
+# worst point and stretch the panel asymmetrically; we clip them to this
+# floor and flag them with a "< 0.1" annotation instead.
+_Y_FLOOR_LOG = 0.1
+
+
 def plot_best_per_group(
     df_results: pd.DataFrame,
     metric: MetricLike,
@@ -364,7 +405,8 @@ def plot_best_per_group(
             best_ratio.at[gname, ds] = col.loc[winner]
             best_winner.at[gname, ds] = winner
 
-    plot_ratio = best_ratio.where(best_ratio > 0) if yscale == 'log' else best_ratio
+    plot_ratio = (best_ratio.where(best_ratio > _Y_FLOOR_LOG)
+                  if yscale == 'log' else best_ratio)
 
     if figsize is None:
         figsize = (1.5 + 1.1 * len(ds_sorted), 4.6)
@@ -375,7 +417,7 @@ def plot_best_per_group(
     x = np.arange(len(ds_sorted))
 
     for gi, gname in enumerate(groups.keys()):
-        c = palette[gi]
+        c = _desaturate(palette[gi])
         m = markers[gi % len(markers)]
         y = plot_ratio.loc[gname].to_numpy(dtype=float)
         ax.plot(x, y, color=c, marker=m, markersize=7, linewidth=1.8,
@@ -398,10 +440,12 @@ def plot_best_per_group(
     for ei, name in enumerate(extras):
         if name not in ratio.index:
             continue
-        c = palette[(extra_offset + ei) % len(palette)]
+        raw_c = palette[(extra_offset + ei) % len(palette)]
+        c = raw_c if name in _VIVID_LEARNERS else _desaturate(raw_c)
         m = markers[(extra_offset + ei) % len(markers)]
         y_raw = ratio.loc[name].reindex(ds_sorted).to_numpy(dtype=float)
-        y = np.where(y_raw > 0, y_raw, np.nan) if yscale == 'log' else y_raw
+        y = (np.where(y_raw > _Y_FLOOR_LOG, y_raw, np.nan)
+             if yscale == 'log' else y_raw)
         ax.plot(x, y, color=c, marker=m, markersize=7, linewidth=1.4,
                 linestyle=':', label=name)
 
@@ -442,6 +486,8 @@ def plot_best_per_group(
     if title is None:
         title = f'{spec.pretty_name}: per-group winner (vs. {baseline}-Learner)'
     ax.set_title(title, fontsize=11)
+
+    _shade_good_bad(ax, direction=spec.direction)
 
     ax.legend(loc='best', fontsize=9, framealpha=0.9)
     ax.grid(True, which='both', alpha=0.25)
@@ -516,9 +562,12 @@ def plot_dots_with_lines(
     # Curated palette: red is reserved for the baseline; group_colors and
     # extra_colors are disjoint so groups, extras and baseline are always
     # visually distinct. Slot 1 is goldenrod (warm but legible on white).
-    group_colors = [palette[0], '#e6b800', palette[5], palette[7], palette[4]]
+    raw_group_colors = [palette[0], '#e6b800', palette[5], palette[7], palette[4]]
+    # Group dots are always context: muted regardless of which learners they
+    # contain (no group is a single privileged learner).
+    group_colors = [_desaturate(c) for c in raw_group_colors]
     # blue, gold, brown, gray, purple
-    extra_colors = [palette[i] for i in (2, 1, 9, 6)]      # green, orange, cyan, pink
+    raw_extra_colors = [palette[i] for i in (2, 1, 9, 6)]      # green, orange, cyan, pink
 
     # Legend order: baseline, then extras (lines), then groups (dot clouds) —
     # reads top-down "baseline / featured / context".
@@ -538,7 +587,7 @@ def plot_dots_with_lines(
         for j, ds in enumerate(ds_sorted):
             col = ratio.loc[members_present, ds].dropna()
             if yscale == 'log':
-                col = col[col > 0]
+                col = col[col > _Y_FLOOR_LOG]
             if col.empty:
                 continue
             ax.scatter(np.full(len(col), j), col.to_numpy(),
@@ -564,12 +613,13 @@ def plot_dots_with_lines(
     for ei, name in enumerate(extras):
         if name not in ratio.index:
             continue
-        c = extra_colors[ei % len(extra_colors)]
+        raw_c = raw_extra_colors[ei % len(raw_extra_colors)]
+        c = raw_c if name in _VIVID_LEARNERS else _desaturate(raw_c)
         m = line_markers[ei % len(line_markers)]
         y_raw = ratio.loc[name].reindex(ds_sorted).to_numpy(dtype=float)
 
         if yscale == 'log':
-            clipped_mask = (y_raw <= 0) | np.isnan(y_raw)
+            clipped_mask = (y_raw <= _Y_FLOOR_LOG) | np.isnan(y_raw)
             ax.scatter(x[~clipped_mask], y_raw[~clipped_mask],
                        color=c, marker=m, s=64,
                        edgecolors='black', linewidths=0.5, zorder=6)
@@ -599,7 +649,7 @@ def plot_dots_with_lines(
         y_raw = ratio.loc[name].reindex(ds_sorted).to_numpy(dtype=float)
 
         if yscale == 'log':
-            clipped_mask = (y_raw <= 0) | np.isnan(y_raw)
+            clipped_mask = (y_raw <= _Y_FLOOR_LOG) | np.isnan(y_raw)
             secondary_state.append((name, ls, y_raw, clipped_mask))
         else:
             ax.plot(x, y_raw, color=secondary_color, linestyle=ls,
@@ -633,7 +683,7 @@ def plot_dots_with_lines(
         for j, ds in enumerate(ds_sorted):
             col = ratio.loc[list(plotted), ds].dropna()
             if yscale == 'log':
-                col = col[col > 0]
+                col = col[col > _Y_FLOOR_LOG]
             if col.empty:
                 continue
             top = pick(col, min(annotate_top, len(col)))
@@ -686,47 +736,18 @@ def plot_dots_with_lines(
             return f'{10.0 ** n:g}'
         ax.yaxis.set_major_formatter(FuncFormatter(_ylab))
 
-    # Connect extras through the panel floor at clipped columns so the line
-    # stays continuous; an "x" at the floor flags each failure.
-    if extras_state:
-        ymin, _ = ax.get_ylim()
-        for name, c, marker, y_raw, clipped_mask in extras_state:
-            y_line = np.where(clipped_mask, ymin, y_raw)
-            ax.plot(x, y_line, color=c, linewidth=2.2,
-                    linestyle='-', label=name, zorder=5)
-            for j_neg in np.where(clipped_mask)[0]:
-                ax.scatter(j_neg, ymin, marker='x', s=70, color=c,
-                           linewidths=2.0, clip_on=False, zorder=6)
-                ax.annotate(
-                    f'{name} < 0', xy=(j_neg, ymin),
-                    xytext=(0, 8), textcoords='offset points',
-                    ha='center', va='bottom',
-                    fontsize=7.5, color='black', fontweight='bold',
-                    zorder=10,
-                    bbox=dict(facecolor='white', edgecolor='none',
-                              alpha=0.85, pad=1.0),
-                )
+    # Extras and secondary lines: gap the line over clipped columns instead
+    # of dragging it to a floor marker. Values below _Y_FLOOR_LOG are
+    # excluded entirely so matplotlib autoscale stays tight.
+    for name, c, marker, y_raw, clipped_mask in extras_state:
+        y_line = np.where(clipped_mask, np.nan, y_raw)
+        ax.plot(x, y_line, color=c, linewidth=2.2,
+                linestyle='-', label=name, zorder=5)
 
-    # Same treatment for secondary (thin grey) lines.
-    if secondary_state:
-        ymin, _ = ax.get_ylim()
-        for name, ls, y_raw, clipped_mask in secondary_state:
-            y_line = np.where(clipped_mask, ymin, y_raw)
-            ax.plot(x, y_line, color=secondary_color, linestyle=ls,
-                    linewidth=1.0, label=name, zorder=3)
-            for j_neg in np.where(clipped_mask)[0]:
-                ax.scatter(j_neg, ymin, marker='x', s=36,
-                           color=secondary_color, linewidths=1.4,
-                           clip_on=False, zorder=4)
-                ax.annotate(
-                    f'{name} < 0', xy=(j_neg, ymin),
-                    xytext=(0, 8), textcoords='offset points',
-                    ha='center', va='bottom',
-                    fontsize=7, color='black',
-                    zorder=10,
-                    bbox=dict(facecolor='white', edgecolor='none',
-                              alpha=0.85, pad=1.0),
-                )
+    for name, ls, y_raw, clipped_mask in secondary_state:
+        y_line = np.where(clipped_mask, np.nan, y_raw)
+        ax.plot(x, y_line, color=secondary_color, linestyle=ls,
+                linewidth=1.0, label=name, zorder=3)
 
     xticklabels = [f'{d}\n({conv_rates[d] * 100:.1f}%)' for d in ds_sorted]
     ax.set_xticks(range(n_cols))
@@ -743,6 +764,8 @@ def plot_dots_with_lines(
     if title is None:
         title = f'{spec.pretty_name}: per-learner ratios vs. {baseline}-Learner'
     ax.set_title(title, fontsize=11)
+
+    _shade_good_bad(ax, direction=spec.direction)
 
     ax.legend(handles=legend_handles, loc='best', fontsize=8.5,
               framealpha=0.9)

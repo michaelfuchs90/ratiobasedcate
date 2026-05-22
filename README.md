@@ -124,12 +124,13 @@ seed) combinations.
 
 After the sweep, the plotting cells regenerate
 
-- `fig_rct_dots_with_lines.png` — Q-Learner / Q-Simple / S-baseline
-  ratios across the seven RCT datasets, sorted by conversion rate
-  (Figure 1 of the paper).
+- `fig_rct_dots.png` — DR vs. non-DR comparison across the seven RCT
+  datasets, sorted by conversion rate (Figure 1 of the paper).
+- `fig_rct_learners.png` — Q-Learner / X-Learner / DR-Q-Simple ratios
+  on the four low-conversion RCTs (Figure 2 of the paper).
 - `fig_obs_new_vs_rest.png` — best DR variant vs. best non-DR
   competitor on the four observational datasets, with R-Learner
-  overlay (Figure 2 of the paper).
+  overlay (Figure 3 of the paper).
 - Per-(learner, dataset) heatmaps for Qini and calibration error
   (appendix figures).
 
