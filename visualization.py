@@ -301,7 +301,7 @@ def plot_heatmap(
     return fig, ratio
 
 
-def _desaturate(color, saturation: float = 0.45, lightness_boost: float = 0.10):
+def _desaturate(color, saturation: float = 0.30, lightness_boost: float = 0.18):
     """Mute a colour by lowering HLS saturation and brightening slightly."""
     r, g, b = mcolors.to_rgb(color)
     h, l, s = colorsys.rgb_to_hls(r, g, b)
@@ -312,7 +312,7 @@ def _desaturate(color, saturation: float = 0.45, lightness_boost: float = 0.10):
 
 def _shade_good_bad(ax, *, direction: str, baseline_y: float = 1.0,
                     good_color: str = '#2ca02c', bad_color: str = '#d62728',
-                    alpha: float = 0.06) -> None:
+                    alpha: float = 0.035) -> None:
     """Tint the background green on the "better than baseline" side and red on
     the "worse" side. Direction='max' ⇒ y > baseline is good (green above);
     direction='min' ⇒ y < baseline is good (green below).
@@ -329,14 +329,24 @@ def _shade_good_bad(ax, *, direction: str, baseline_y: float = 1.0,
     ax.set_ylim(ymin, ymax)
 
 
-# Learners that keep their full saturation. S is the baseline (drawn as the
-# red reference line, not as a coloured series), so only Q stays vivid.
-_VIVID_LEARNERS = frozenset({'Q'})
+# Highlight palette: methods proposed in this paper. Primary contribution
+# (typically Q or the new-DR group) gets the saturated green; secondary
+# contribution gets the warm goldenrod / brown that matches the second group
+# colour in plot_best_per_group, so the two figures share a palette.
+_HIGHLIGHT_GREEN = '#2ca02c'        # primary contribution
+_HIGHLIGHT_BROWN = _desaturate('#e6b800')  # secondary contribution
+
+# Methods proposed in this paper. Used to override the default desaturated
+# palette so contributions stand out.
+_CONTRIBUTIONS = frozenset({
+    'Q', 'Q-Simple',
+    'DR-Q', 'DR-Q-Simple', 'DR-Q log', 'DR-Q-Simple log',
+})
 
 # Lower bound for the log-scale y-axis in plot_dots_with_lines. A handful of
 # learners (e.g. DR-Q on Twins) dip an order of magnitude below the next
-# worst point and stretch the panel asymmetrically; we clip them to this
-# floor and flag them with a "< 0.1" annotation instead.
+# worst point and stretch the panel asymmetrically; we exclude them so the
+# panel autoscale stays tight.
 _Y_FLOOR_LOG = 0.1
 
 
@@ -405,8 +415,7 @@ def plot_best_per_group(
             best_ratio.at[gname, ds] = col.loc[winner]
             best_winner.at[gname, ds] = winner
 
-    plot_ratio = (best_ratio.where(best_ratio > _Y_FLOOR_LOG)
-                  if yscale == 'log' else best_ratio)
+    plot_ratio = best_ratio.where(best_ratio > 0) if yscale == 'log' else best_ratio
 
     if figsize is None:
         figsize = (1.5 + 1.1 * len(ds_sorted), 4.6)
@@ -416,8 +425,21 @@ def plot_best_per_group(
     markers = ['o', 's', '^', 'D', 'v']
     x = np.arange(len(ds_sorted))
 
-    for gi, gname in enumerate(groups.keys()):
-        c = _desaturate(palette[gi])
+    # First group is treated as the "ours" envelope (typically the new DR
+    # variants) and gets the contribution green. Subsequent groups get
+    # desaturated tab10 colours.
+    group_names = list(groups.keys())
+    group_colors_resolved = []
+    for gi, gname in enumerate(group_names):
+        members = groups[gname]
+        is_ours = any(m in _CONTRIBUTIONS for m in members)
+        if gi == 0 and is_ours:
+            group_colors_resolved.append(_HIGHLIGHT_GREEN)
+        else:
+            group_colors_resolved.append(_desaturate(palette[gi]))
+
+    for gi, gname in enumerate(group_names):
+        c = group_colors_resolved[gi]
         m = markers[gi % len(markers)]
         y = plot_ratio.loc[gname].to_numpy(dtype=float)
         ax.plot(x, y, color=c, marker=m, markersize=7, linewidth=1.8,
@@ -440,12 +462,13 @@ def plot_best_per_group(
     for ei, name in enumerate(extras):
         if name not in ratio.index:
             continue
-        raw_c = palette[(extra_offset + ei) % len(palette)]
-        c = raw_c if name in _VIVID_LEARNERS else _desaturate(raw_c)
+        if name in _CONTRIBUTIONS:
+            c = _HIGHLIGHT_BROWN
+        else:
+            c = _desaturate(palette[(extra_offset + ei) % len(palette)])
         m = markers[(extra_offset + ei) % len(markers)]
         y_raw = ratio.loc[name].reindex(ds_sorted).to_numpy(dtype=float)
-        y = (np.where(y_raw > _Y_FLOOR_LOG, y_raw, np.nan)
-             if yscale == 'log' else y_raw)
+        y = np.where(y_raw > 0, y_raw, np.nan) if yscale == 'log' else y_raw
         ax.plot(x, y, color=c, marker=m, markersize=7, linewidth=1.4,
                 linestyle=':', label=name)
 
@@ -514,6 +537,7 @@ def plot_dots_with_lines(
     regime_split_after: Optional[int] = None,
     yscale: str = 'log',
     annotate_top: int = 1,
+    dot_emphasis: bool = False,
     figsize: Optional[Tuple[float, float]] = None,
     title: Optional[str] = None,
     savepath: Optional[str] = None,
@@ -527,6 +551,10 @@ def plot_dots_with_lines(
     R_l(d) across datasets. ``secondary`` learners stay in the dot cloud
     but get an extra thin grey context line. ``regime_split_after=k`` draws
     a dashed vertical line between dataset k and k+1 (zero-indexed).
+
+    ``dot_emphasis=True`` makes the dot cloud the visual focus: dots become
+    larger, less transparent, and less desaturated. Use it when the figure's
+    story is "look at the cloud" rather than "follow the line".
 
     Returns ``(fig, ratio)``.
     """
@@ -563,11 +591,15 @@ def plot_dots_with_lines(
     # extra_colors are disjoint so groups, extras and baseline are always
     # visually distinct. Slot 1 is goldenrod (warm but legible on white).
     raw_group_colors = [palette[0], '#e6b800', palette[5], palette[7], palette[4]]
-    # Group dots are always context: muted regardless of which learners they
-    # contain (no group is a single privileged learner).
-    group_colors = [_desaturate(c) for c in raw_group_colors]
     # blue, gold, brown, gray, purple
-    raw_extra_colors = [palette[i] for i in (2, 1, 9, 6)]      # green, orange, cyan, pink
+    if dot_emphasis:
+        # Lighter desaturation so the groups carry the panel.
+        group_colors = [_desaturate(c, saturation=0.65, lightness_boost=0.05)
+                        for c in raw_group_colors]
+        dot_alpha, dot_size, dot_lw = 0.85, 64, 0.5
+    else:
+        group_colors = [_desaturate(c) for c in raw_group_colors]
+        dot_alpha, dot_size, dot_lw = 0.55, 42, 0.3
 
     # Legend order: baseline, then extras (lines), then groups (dot clouds) —
     # reads top-down "baseline / featured / context".
@@ -575,8 +607,9 @@ def plot_dots_with_lines(
     group_handles = []
     extra_handles = []
 
-    # Dots for grouped learners. Secondary learners stay in the dot cloud
-    # (keep their group colour); only their connecting line is drawn separately.
+    # Dots for grouped learners. Groups are always context (no group is a
+    # single privileged learner), so their dots are drawn semi-transparent on
+    # top of muted colours.
     for gi, (gname, members) in enumerate(groups.items()):
         c = group_colors[gi % len(group_colors)]
         members_present = [m for m in members
@@ -591,12 +624,13 @@ def plot_dots_with_lines(
             if col.empty:
                 continue
             ax.scatter(np.full(len(col), j), col.to_numpy(),
-                       s=42, alpha=0.75, color=c,
-                       edgecolors='black', linewidths=0.4, zorder=2)
+                       s=dot_size, alpha=dot_alpha, color=c,
+                       edgecolors='black', linewidths=dot_lw, zorder=2)
         group_handles.append(
             Line2D([], [], marker='o', linestyle='', color=c,
-                   markeredgecolor='black', markeredgewidth=0.4,
-                   markersize=8, label=gname)
+                   markeredgecolor='black', markeredgewidth=dot_lw,
+                   markersize=8, alpha=min(1.0, dot_alpha + 0.15),
+                   label=gname)
         )
 
     # Extras: bold lines on top of the dot cloud. On log-scale, non-positive
@@ -606,33 +640,53 @@ def plot_dots_with_lines(
     line_markers = ['s', '^', 'D', 'v', 'P', 'X']
     x = np.arange(n_cols)
 
-    # First pass: plot extras only at valid (positive) positions so matplotlib
-    # autoscales y on positive data alone. Connecting segments are drawn
-    # later, after ymin is known.
-    extras_state = []  # (name, color, marker, y_raw, clipped_mask)
+    # Extras: contributions get the highlight palette in encounter order
+    # (Q → primary green, DR-Q-Simple → brown). Non-contribution extras share
+    # the same desaturated tab10 slot used for the corresponding extras in
+    # plot_best_per_group, so the two figures read as one palette family.
+    contribution_palette = [_HIGHLIGHT_GREEN, _HIGHLIGHT_BROWN]
+    other_palette = [_desaturate(palette[i]) for i in (2, 3, 9, 6)]
+    contrib_idx = 0
+    other_idx = 0
+    extras_state = []  # (name, color, marker, y_raw, clipped_mask, line_kwargs, scatter_kwargs)
     for ei, name in enumerate(extras):
         if name not in ratio.index:
             continue
-        raw_c = raw_extra_colors[ei % len(raw_extra_colors)]
-        c = raw_c if name in _VIVID_LEARNERS else _desaturate(raw_c)
+        if name in _CONTRIBUTIONS:
+            c = contribution_palette[contrib_idx % len(contribution_palette)]
+            contrib_idx += 1
+            line_kwargs = dict(linewidth=2.2, linestyle='-')
+            # Contribution extras pop: full-size markers with a black edge.
+            scatter_kwargs = dict(s=64, edgecolors='black', linewidths=0.5)
+            marker_size = 8
+            marker_edge = 0.5
+        else:
+            c = other_palette[other_idx % len(other_palette)]
+            other_idx += 1
+            # Non-contribution extras read as context, not the protagonist:
+            # dotted line, smaller markers, no black edge so the desaturated
+            # colour shows through.
+            line_kwargs = dict(linewidth=1.4, linestyle=':')
+            scatter_kwargs = dict(s=42, edgecolors='none', linewidths=0)
+            marker_size = 6
+            marker_edge = 0
         m = line_markers[ei % len(line_markers)]
         y_raw = ratio.loc[name].reindex(ds_sorted).to_numpy(dtype=float)
 
         if yscale == 'log':
             clipped_mask = (y_raw <= _Y_FLOOR_LOG) | np.isnan(y_raw)
             ax.scatter(x[~clipped_mask], y_raw[~clipped_mask],
-                       color=c, marker=m, s=64,
-                       edgecolors='black', linewidths=0.5, zorder=6)
-            extras_state.append((name, c, m, y_raw, clipped_mask))
+                       color=c, marker=m, zorder=6, **scatter_kwargs)
+            extras_state.append((name, c, m, y_raw, clipped_mask, line_kwargs))
         else:
-            ax.plot(x, y_raw, color=c, marker=m, markersize=8, linewidth=2.2,
-                    linestyle='-', markeredgecolor='black',
-                    markeredgewidth=0.5, label=name, zorder=5)
+            ax.plot(x, y_raw, color=c, marker=m, markersize=marker_size,
+                    markeredgecolor='black', markeredgewidth=marker_edge,
+                    label=name, zorder=5, **line_kwargs)
 
         extra_handles.append(
-            Line2D([], [], color=c, marker=m, markersize=8, linewidth=2.2,
-                   markeredgecolor='black', markeredgewidth=0.5,
-                   label=name)
+            Line2D([], [], color=c, marker=m, markersize=marker_size,
+                   markeredgecolor='black', markeredgewidth=marker_edge,
+                   label=name, **line_kwargs)
         )
 
     # Secondary lines: thin grey context lines (different linestyles to
@@ -739,10 +793,9 @@ def plot_dots_with_lines(
     # Extras and secondary lines: gap the line over clipped columns instead
     # of dragging it to a floor marker. Values below _Y_FLOOR_LOG are
     # excluded entirely so matplotlib autoscale stays tight.
-    for name, c, marker, y_raw, clipped_mask in extras_state:
+    for name, c, marker, y_raw, clipped_mask, line_kwargs in extras_state:
         y_line = np.where(clipped_mask, np.nan, y_raw)
-        ax.plot(x, y_line, color=c, linewidth=2.2,
-                linestyle='-', label=name, zorder=5)
+        ax.plot(x, y_line, color=c, label=name, zorder=5, **line_kwargs)
 
     for name, ls, y_raw, clipped_mask in secondary_state:
         y_line = np.where(clipped_mask, np.nan, y_raw)
