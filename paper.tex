@@ -1,21 +1,21 @@
 \documentclass{article}
+\pdfoutput=1 % arXiv: force PDF-LaTeX output (required for PNG figures)
 
 \usepackage{arxiv}
 
 \usepackage[utf8]{inputenc} % allow utf-8 input
 \usepackage[T1]{fontenc}    % use 8-bit T1 fonts
-%\usepackage{hyperref}       % hyperlinks
-\usepackage[hypertexnames=false]{hyperref}
 \usepackage{url}            % simple URL typesetting
 \usepackage{booktabs}       % professional-quality tables
 \usepackage{amsfonts}       % blackboard math symbols
-\usepackage{nicefrac}       % compact symbols for 1/2, etc.
 \usepackage{microtype}      % microtypography
 \usepackage{amsmath}
 \usepackage{graphicx}
 \usepackage{natbib}
 \usepackage{float}
-\usepackage{doi}
+% Pass options to hyperref before it is loaded transitively by `doi`
+\PassOptionsToPackage{hypertexnames=false}{hyperref}
+\usepackage{doi} % loads hyperref internally
 
 \newtheorem{assumption}{Assumption}
 \newtheorem{remark}{Remark}
@@ -31,25 +31,28 @@
 \newcommand{\tauD}{\tau^{\text{diff}}}
 
 
-\title{Beyond Differences: Doubly Robust Meta-Learners\\for Ratio-Based Treatment Effects%
-%\thanks{Code, data, and scripts to reproduce the experiments are available at \url{https://github.com/michaelfuchs90/ratiobasedcate}.}
-}
+\title{Beyond Differences: Doubly Robust Meta-Learners\\for Ratio-Based Treatment Effects}
 
-% Here you can change the date presented in the paper title
-%\date{September 9, 1985}
-% Or remove it
 \date{}
+% \author{
+%   Michael Fuchs\thanks{Corresponding author.} \\
+%   Actuarial Department \\
+%   Allianz Versicherungs-AG \\
+%   Munich, Germany \\
+%   \texttt{michael.fuchs@outlook.de} \\
+%   \And
+%   Dominik Kreiss \\
+%   Actuarial Department \\
+%   Allianz Versicherungs-AG \\
+%   Munich, Germany \\
+% }
 \author{
-  Michael Fuchs\thanks{Corresponding author.} \\
+  Michael Fuchs\thanks{Corresponding author.} \quad Dominik Kreiss \\
+  Actuarial Department \\
+  Allianz Versicherungs-AG \\
   Munich, Germany \\
-  \texttt{michael.fuchs@outlook.de} \\
-  \And
-  Dominik Kreiss \\
-  Munich, Germany \\
-  %\texttt{michael.fuchs@outlook.de} \\
-  % TODO: fill in Dominik's affiliation and email
+  \texttt{michael.fuchs@outlook.de}
 }
-
 
 \renewcommand{\shorttitle}{Doubly Robust Meta-Learners for Ratio-Based Treatment Effects}
 
@@ -58,7 +61,7 @@
 pdftitle={Beyond Differences: Doubly Robust Meta-Learners for Ratio-Based Treatment Effects},
 pdfsubject={stat.ML, stat.ME},
 pdfauthor={Michael Fuchs, Dominik Kreiss},
-pdfkeywords={Conditional Average Treatment Effect, Ratio-based CATE, Meta-Learner, Doubly Robust Estimation, Heterogeneous Treatment Effects, Uplift Modeling},
+pdfkeywords={Ratio-based CATE, Doubly Robust Estimation, Meta-Learner, Uplift Modeling},
 }
 
 \begin{document}
@@ -68,8 +71,7 @@ pdfkeywords={Conditional Average Treatment Effect, Ratio-based CATE, Meta-Learne
 	When treatment effects are naturally expressed as ratios --- as in
 medicine, pricing, and marketing --- the ratio-based CATE
 $\tau(x) = \mathbb{E}[Y|W{=}1,X{=}x] / \mathbb{E}[Y|W{=}0,X{=}x]$ is
-the appropriate estimand. Yet existing estimators either impose
-log-linear parametric structure or apply generic regression without
+the appropriate estimand. Yet existing estimators either impose a log-linear parametric structure or apply generic regression without
 robustness guarantees for this functional. We introduce the
 \emph{Q-Learner}, which decomposes $\tau(x)$ into a product of two
 odds ratios, reducing ratio-CATE estimation for binary outcomes to
@@ -88,8 +90,7 @@ observational data.
 
 
 % keywords can be removed
-\keywords{Conditional Average Treatment Effect \and Ratio-based CATE \and Meta-Learner \and Doubly Robust Estimation \and Heterogeneous Treatment Effects \and Uplift Modeling}
-
+\keywords{Ratio-based CATE \and Doubly Robust Estimation \and Meta-Learner \and Uplift Modeling}
 
 \section{Introduction}
 \label{sec:introduction}
@@ -226,8 +227,9 @@ Closest to our setting, \citet{yadlowsky2021ratio} propose a doubly
 robust estimator for the ratio-based CATE restricted to a log-linear
 semiparametric model $D(z) = \exp(\beta_0^\top z)$. Our work imposes no
 parametric structure on $\tau(x)$, introduces the Q-Learner
-parameterisation that requires no outcome regression, and derives two
-distinct DR augmentations with differing robustness properties. Causal
+parameterisation, which in its plug-in form requires no outcome
+regression, and derives two distinct DR augmentations with differing
+robustness properties. Causal
 forests \citep{athey2019grf} estimate heterogeneous effects via local
 moment conditions and can in principle target non-standard functionals,
 but do not provide an out-of-the-box estimator or efficiency theory for
@@ -920,19 +922,15 @@ patterns emerge that suggest standard procedures for the
 practitioner. Underlying per-dataset values and heatmaps are deferred
 to Appendix~\ref{app:sec:full-results}.
 
-\begin{figure}[t]
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=1\textwidth]{fig_rct_dots.png}
-\caption{$\mathrm{Qini}_l / \mathrm{Qini}_S$ across the seven RCT
-datasets, sorted by conversion rate (low to high). Each dot is one
-non-baseline learner, coloured by group: ``DR methods'' pools every
-DR variant in our suite (the difference-CATE plug-in DR together with
-the ratio-DR family DR-S/T/Q and their log/Simple variants);
-``non-DR methods'' contains the plug-in T, X, R, Q, and Q-Simple. The
-per-dataset best non-S learner is labelled by name. The dashed
-vertical line separates the four low-conversion datasets (left) from
-the three high-conversion ones (right). The S-Learner baseline is
-the red line at $1$.}
+\caption{Qini ratio to the S-Learner across the seven RCT datasets, sorted by conversion rate. Each dot is one non-baseline
+  learner; colour denotes group (DR vs.\ non-DR). Values above the red baseline ($R = 1$) beat
+  standard ML (the S-Learner). The
+  per-dataset best non-S learner is labelled by name. \emph{Three observations:} the per-dataset winner varies across
+  datasets; neither DR nor non-DR is consistently ahead; and at high conversion rates (right of the dashed line) the
+  S-Learner sits at the top of the field, practically tied with the dataset winner.}
 \label{fig:rct-dr-vs-nondr}
 \end{figure}
 
@@ -945,22 +943,19 @@ no confounding can arise, plug-in learners already identify the
 CATE, so the DR correction has no structural advantage to offer.
 
 \paragraph{High CVR: standard ML suffices.}
-On the three high-conversion datasets (X5, MegaFon, Criteo) in the
+On the three high-conversion datasets (Hillstrom (Visit), MegaFon, X5) in the
 right panel of Figure~\ref{fig:rct-dr-vs-nondr}, the S-Learner sits
 within a hair of the dataset winner. Causal meta-learners sometimes
 edge S out, but only slightly. Without the imbalance problem that
-motivates ratio-CATEs, an out-of-the-box GBM is enough.
+motivates ratio-CATEs, standard ML (S-Learner) is enough.
 
-\begin{figure}[t]
+\begin{figure}[!htbp]
 \centering
-\includegraphics[width=1\textwidth]{fig_rct_learners.png}
-\caption{$\mathrm{Qini}_l / \mathrm{Qini}_S$ on the four
-low-conversion RCT datasets (H(Conv), Twins, Criteo, Lenta).
-Q-Learner, X-Learner, and DR-Q-Simple are highlighted as coloured
-lines to track their per-dataset behaviour; the remaining
-non-baseline learners are pooled into a single grey ``other'' cloud
-that locates the three featured learners against the rest of the
-suite. The S-Learner baseline is the red line at $1$.}
+\includegraphics[width=0.65\textwidth]{fig_rct_learners.png}
+\caption{Qini ratio to the S-Learner on the four low-conversion RCT datasets. Values above the red baseline ($R = 1$) beat
+  standard ML (the S-Learner). The three learners that most often beat S --- Q-Learner, DR-Q-Simple and X-Learner ---
+  are shown as coloured lines; the remaining non-baseline learners are shown as grey dots. Of the three, the Q-Learner
+  stays closest to the top across all four datasets.}
 \label{fig:rct-low-cvr-learners}
 \end{figure}
 
@@ -991,37 +986,35 @@ propensity makes it applicable.
 \label{sec:ranking-obs}
 On observational data, where propensity must be estimated and
 confounding can bias plug-in estimates, the result reverses: the
-DR augmentation now \emph{earns its keep}. The new DR learners
-introduced in this paper consistently outperform both plug-in
-estimators and out-of-the-box ML baselines. The new DR family is
-therefore the practitioner's go-to choice once confounding is in
-play.
+DR augmentation now makes a difference. The proposed ratio-DR learners
+consistently outperform both plug-in estimators and out-of-the-box ML
+baselines. The proposed ratio-DR family is therefore the
+practitioner's go-to choice once confounding is in play.
 
-The new methods take the top spot on three of four observational
-datasets, while the single loss is to the R-Learner on RHC; since the
-R-Learner is unremarkable on the other three observational datasets
-(and on the RCT panel as well), we read this as an isolated quirk of
-the RHC data rather than evidence for an alternative recipe.
+The proposed ratio-DR learners take the top spot on three of four
+observational datasets, while the single loss is to the R-Learner on
+RHC; since the R-Learner is unremarkable on the other three
+observational datasets (and on the RCT panel as well), we read this as
+an isolated quirk of the RHC data rather than evidence for an
+alternative recipe.
 Figure~\ref{fig:obs-new-vs-rest} summarises this picture by plotting
-the best new-DR learner against the best non-DR competitor for each
+the best proposed ratio-DR learner against the best non-DR competitor for each
 observational dataset, with the R-Learner overlaid as a dotted line
 to make the RHC exception visible. The unusually high
 $\mathrm{Qini}_l / \mathrm{Qini}_S$ values on RHC reflect the fact
 that the S-Learner Qini drops to
-essentially zero---no better than random ranking---further underpinning
+essentially zero---no better than random ranking---further underscoring
 the need for specialised bias-correction methods like the DR family on
 confounded data.
 
-\begin{figure}[t]
+\begin{figure}[!htbp]
 \centering
-\includegraphics[width=0.85\textwidth]{fig_obs_new_vs_rest.png}
-\caption{Best new-DR learner vs.\ best non-DR competitor (T, Q,
-Q-Simple, X, DR) on the four observational datasets, sorted by
-baseline conversion rate. Each marker is labelled with the winning
-learner of its group. The R-Learner is overlaid separately as a dotted
-line: it sits below the DR line on Cattaneo, NHEFS, and JTPA, and
-spikes far above on RHC. The S-Learner baseline ($R = 1$) is shown in
-red.}
+\includegraphics[width=0.65\textwidth]{fig_obs_new_vs_rest.png}
+\caption{Qini ratio to the S-Learner on the four observational datasets, sorted by conversion rate. The two solid lines track
+  the best of the proposed ratio-DR family against the best of the rest (T, Q, Q-Simple, X, DR); the per-group winner is
+   labelled by name. The R-Learner is overlaid as a dotted line. Values above the red baseline ($R = 1$) beat standard
+  ML (the S-Learner). \emph{Observation:} the best proposed ratio-DR learner beats every other learner on every dataset
+  except RHC, where the otherwise unremarkable R-Learner finishes higher.}
 \label{fig:obs-new-vs-rest}
 \end{figure}
 
@@ -1040,16 +1033,15 @@ datasets this risk is reduced, and the direct scale's lower bias
 becomes attractive again.
 
 \paragraph{DR-Q vs.\ DR-S/T.}
-Within the new DR family, DR-Q is rarely the outright per-dataset
+Within the proposed ratio-DR family, DR-Q is rarely the outright per-dataset
 winner; DR-S and DR-T (or their log counterparts) usually occupy the
 top spot. This is consistent with the theoretical prediction from
-Section~\ref{sec:experiments}: DR-Q only achieves \emph{conditional}
+Section~\ref{sec:dr-q}: DR-Q only achieves \emph{conditional}
 robustness, while DR-S/T retain the classical double-robust guarantee,
 so a residual gap was expected. The cleanest read on this gap comes
 from the log-scale variants, which share a variance-stabilised scale
-and isolate the robustness comparison: DR-Q log even overtakes DR-S/T
-log on JTPA, ties them on NHEFS, and lags only modestly on Cattaneo
-and RHC. The conditional-robustness penalty is therefore mild, suggesting
+and isolate the robustness comparison: DR-Q log narrowly leads on JTPA,
+ties DR-S/T log on NHEFS, and lags only modestly on Cattaneo and RHC. The conditional-robustness penalty is therefore mild, suggesting
 good propensity estimation.
 
 
@@ -1063,11 +1055,9 @@ other five. Direct-scale DR variants are persistently miscalibrated
 by factors of $2$--$10\times$ the S-Learner; log-scale DR variants,
 the X- and R-comparators, and the plug-in T- and Q-Learners fall in
 between. Per-dataset values are in Tables~\ref{tab:cal-ratio-rct} and
-\ref{tab:cal-ratio-obs} (Appendix~\ref{app:sec:full-results}). As
-discussed in Section~\ref{sec:experiments-setup}, the miscalibration
-of Q-style learners is a structural property of the
-propensity-classifier training and recoverable via a simple linear
-post-hoc transformation; full analysis is beyond this paper's scope.
+\ref{tab:cal-ratio-obs} (Appendix~\ref{app:sec:full-results}). The
+Q-style miscalibration is recoverable via a simple linear post-hoc
+transformation, as noted in Section~\ref{sec:experiments-setup}.
 
 
 \subsection{Summary and Practical Guidance}
@@ -1079,11 +1069,11 @@ the following default choices:
     \item \textbf{RCT, high conversion rate:} S-Learner.
     \item \textbf{RCT, low conversion rate:} Q-Learner.
     \item \textbf{Observational data:} one of DR-S / DR-T / DR-Q
-    (log-scale at low conversion, direct-scale otherwise).
-    \item \textbf{When calibration must be correct out of the box} and
-    no post-hoc recalibration of the chosen learner is desired: the
-    S-Learner is the safe default, since it is the best- or
-    near-best-calibrated method on every dataset we evaluated.
+    (log-scale when the control conversion rate is low ($\lesssim 20\%$),
+    direct-scale otherwise).
+    \item \textbf{When out-of-the-box calibration matters more than
+    ranking:} the S-Learner is the safe default, since it is the
+    best- or near-best-calibrated method on every dataset we evaluated.
 \end{itemize}
 
 \paragraph{Limitations.}
@@ -1134,16 +1124,21 @@ observational settings---demonstrate that targeting the ratio
 functional directly is the right answer in both regimes the
 literature has so far underserved.
 
-Several avenues for future work remain. The influence functions
-established here provide a natural foundation for developing robust
-confidence intervals for ratio-based CATEs, which is essential for
-formal inference. Furthermore, the underlying framework invites
-natural extensions to continuous and time-to-event outcomes. Finally,
-evaluating the impact of learner-specific hyperparameter tuning on the
-Q-Learner is an important practical next step; given that its
-component classifiers directly optimize the $\hat{\tau}(x)$ estimand,
-customized tuning likely offers greater performance leverage than it
-would for standard difference-based meta-learners.
+Several avenues for future work remain. This work focuses on point
+estimation and rank-ordering; quantifying the uncertainty of
+ratio-based effects remains a critical challenge because of error
+propagation in the denominator. The influence functions established
+here provide a natural foundation for asymptotic confidence
+intervals, and---because our doubly robust augmentations yield valid
+pseudo-outcomes---applying conformal inference frameworks
+\citep{lei2021conformal} directly to these scores offers a promising
+path to exact finite-sample prediction intervals. Beyond inference,
+the framework invites natural extensions to continuous and
+time-to-event outcomes. Finally, learner-specific hyperparameter
+tuning is an important practical next step for the Q-Learner: since
+its component classifiers directly optimize the $\hat{\tau}(x)$
+estimand, customised tuning likely offers greater performance
+leverage than it would for standard difference-based meta-learners.
 
 \paragraph{Code and data availability.}
 All code, dataset loaders, and scripts to reproduce the experiments in
@@ -1154,14 +1149,15 @@ generates all figures and tables, and a README with replication
 instructions.
 
 \paragraph{Author contributions.}
-M.F. conceived the project, developed the Q-Learner and the doubly robust
+M.F.\ conceived the project, developed the Q-Learner and the doubly robust
 augmentations, derived the theoretical results, designed and conducted all
-empirical experiments, and wrote the manuscript. D.K.  engaged in conceptual discussions, and assisted with editing and refining the manuscript.
+empirical experiments, and wrote the manuscript. D.K.\ engaged in conceptual discussions and assisted with editing and refining the manuscript.
 
 
 \paragraph{Acknowledgements.}
-We thank Marco Breitig, and Kristina Weidner for
-valuable comments on earlier drafts. 
+We thank Marco Breitig and Kristina Weidner for valuable comments on
+the manuscript. We are particularly grateful to Marco Breitig for
+identifying a crucial mistake in an earlier version of the draft.
 
 %==============================================================================
 % REFERENCES
@@ -1172,19 +1168,27 @@ valuable comments on earlier drafts.
 
 
 
-\begin{thebibliography}{1}
-
-
-
+\begin{thebibliography}{99}
 
 \bibitem[Abadie et~al.(2002)]{abadie2002}
 Abadie, A., Angrist, J., and Imbens, G. (2002).
 Instrumental variables estimates of the effect of subsidized training on the quantiles of trainee earnings.
 \emph{Econometrica}, 70(1):91--117.
 
-\bibitem[Bickel et~al.(1993)]{bickel1993efficient}
-Bickel, P.~J., Klaassen, C.~A., Ritov, Y., and Wellner, J.~A. (1993).
-\emph{Efficient and Adaptive Estimation for Semiparametric Models}. Springer.
+\bibitem[Andersen(2021)]{andersen2021}
+Andersen, L.~W. (2021).
+Absolute vs.\ relative effects---implications for subgroup analyses.
+\emph{Trials}, 22(1):50.
+
+\bibitem[Athey et~al.(2019)]{athey2019grf}
+Athey, S., Tibshirani, J., and Wager, S. (2019).
+Generalized random forests.
+\emph{The Annals of Statistics}, 47(2):1148--1178.
+
+\bibitem[Boughdiri et~al.(2025)]{boughdiri2025}
+Boughdiri, A., Josse, J., and Scornet, E. (2025).
+Quantifying treatment effects: Estimating risk ratios via observational studies.
+\emph{Proceedings of the 42nd International Conference on Machine Learning (ICML)}.
 
 \bibitem[Cattaneo(2010)]{cattaneo2010}
 Cattaneo, M.~D. (2010).
@@ -1206,16 +1210,25 @@ Diemert, E., Betlei, A., Renaudin, C., and Amini, M.~R. (2018).
 A large scale benchmark for uplift modeling.
 \emph{Proceedings of AdKDD \& TargetAd, KDD}.
 
-\bibitem[Boughdiri et~al.(2025)]{boughdiri2025}
-Boughdiri, A., Josse, J., and Scornet, E. (2025).
-Quantifying treatment effects: Estimating risk ratios via observational studies.
-\emph{Proceedings of the 42nd International Conference on Machine Learning (ICML)}.
+\bibitem[Foster and Syrgkanis(2023)]{foster2023orthogonal}
+Foster, D.~J. and Syrgkanis, V. (2023).
+Orthogonal statistical learning.
+\emph{Annals of Statistics}, 51(3). arXiv:1901.09036.
 
+\bibitem[Gao and Hastie(2025)]{gao2025dina}
+Gao, Z. and Hastie, T. (2025).
+Estimating heterogeneous treatment effects for general responses.
+\emph{Biometrics}, 81(4):ujaf162.
 
 \bibitem[Hern{\'a}n and Robins(2020)]{hernan2020}
 Hern{\'a}n, M.~A. and Robins, J.~M. (2020).
 \emph{Causal Inference: What If}.
 Chapman \& Hall/CRC.
+
+\bibitem[Lei and Cand{\`e}s(2021)]{lei2021conformal}
+Lei, L. and Cand{\`e}s, E.~J. (2021).
+Conformal inference of conditional average treatment effects.
+\emph{Journal of the Royal Statistical Society: Series B (Statistical Methodology)}, 83(5):811--845.
 
 \bibitem[Hillstrom(2008)]{hillstrom2008}
 Hillstrom, K. (2008).
@@ -1231,6 +1244,11 @@ LightGBM: A highly efficient gradient boosting decision tree.
 Kennedy, E.~H. (2022).
 Semiparametric doubly robust targeted double machine learning: a review.
 \emph{arXiv:2203.06469}.
+
+\bibitem[Kennedy(2023)]{kennedy2023optimal}
+Kennedy, E.~H. (2023).
+Towards optimal doubly robust estimation of heterogeneous causal effects.
+\emph{Electronic Journal of Statistics}, 17(2). arXiv:2004.14497.
 
 \bibitem[K{\"u}nzel et~al.(2019)]{kunzel2019metalearners}
 K{\"u}nzel, S.~R., Sekhon, J.~S., Bickel, P.~J., and Yu, B. (2019).
@@ -1255,55 +1273,25 @@ Nie, X. and Wager, S. (2021).
 Quasi-oracle estimation of heterogeneous treatment effects.
 \emph{Biometrika}, 108(2):299--319.
 
-\bibitem[Robins et~al.(1994)]{robins1994estimation}
-Robins, J.~M., Rotnitzky, A., and Zhao, L.~P. (1994).
-Estimation of regression coefficients when some regressors are not always observed.
-\emph{Journal of the American Statistical Association}, 89(427):846--866.
-
 \bibitem[Radcliffe and Surry(2011)]{radcliffe2011}
 Radcliffe, N.~J. and Surry, P.~D. (2011).
 Real-world uplift modelling with significance-based uplift trees.
 \emph{White Paper, Stochastic Solutions}.
 
+\bibitem[Richardson et~al.(2017)]{richardson2017modeling}
+Richardson, T.~S., Robins, J.~M., and Wang, L. (2017).
+On modeling and estimation for the relative risk and risk difference.
+\emph{Journal of the American Statistical Association}, 112(519):1121--1130.
+
+\bibitem[Robins et~al.(1994)]{robins1994estimation}
+Robins, J.~M., Rotnitzky, A., and Zhao, L.~P. (1994).
+Estimation of regression coefficients when some regressors are not always observed.
+\emph{Journal of the American Statistical Association}, 89(427):846--866.
+
 \bibitem[Rubin(1974)]{rubin1974}
 Rubin, D.~B. (1974).
 Estimating causal effects of treatments in randomized and nonrandomized studies.
 \emph{Journal of Educational Psychology}, 66(5):688--701.
-
-\bibitem[van~der~Vaart(2000)]{van2000asymptotic}
-van~der~Vaart, A.~W. (2000).
-\emph{Asymptotic Statistics}. Cambridge University Press.
-
-\bibitem[X5 Retail(2020)]{x5retail2020}
-X5 Retail Hero Uplift Competition (2020).
-\url{https://retailhero.ai/}.
-
-\bibitem[Zou(2004)]{zou2004modified}
-Zou, G. (2004).
-A modified Poisson regression approach to prospective studies with binary data.
-\emph{American Journal of Epidemiology}, 159(7):702--706.
-
-
-
-\bibitem[Andersen(2021)]{andersen2021}
-Andersen, L.~W. (2021).
-Absolute vs.\ relative effects---implications for subgroup analyses.
-\emph{Trials}, 22(1):50.
-
-\bibitem[Athey et~al.(2019)]{athey2019grf}
-Athey, S., Tibshirani, J., and Wager, S. (2019).
-Generalized random forests.
-\emph{The Annals of Statistics}, 47(2):1148--1178.
-
-\bibitem[Deeks(2002)]{deeks2002}
-Deeks, J.~J. (2002).
-Issues in the selection of a summary statistic for meta-analysis of clinical trials with binary outcomes.
-\emph{Statistics in Medicine}, 21(11):1575--1600.
-
-\bibitem[Gao and Hastie(2025)]{gao2025dina}
-Gao, Z. and Hastie, T. (2025).
-Estimating heterogeneous treatment effects for general responses.
-\emph{Biometrics}, 81(4):ujaf162.
 
 \bibitem[Schmid et~al.(1998)]{schmid1998}
 Schmid, C.~H., Lau, J., McIntosh, M.~W., and Cappelleri, J.~C. (1998).
@@ -1315,31 +1303,19 @@ Shirvaikar, V., Stor{\aa}s, A., Lin, X., and Holmes, C. (2023).
 Targeting relative risk heterogeneity with causal forests.
 \emph{arXiv preprint arXiv:2309.15793}.
 
-\bibitem[Foster and Syrgkanis(2023)]{foster2023orthogonal}
-Foster, D.~J. and Syrgkanis, V. (2023).
-Orthogonal statistical learning.
-\emph{Annals of Statistics}, 51(3). arXiv:1901.09036.
-
-\bibitem[Greenland(2004)]{greenland2004model}
-Greenland, S. (2004).
-Model-based estimation of relative risks and other epidemiologic measures in studies of common outcomes and in case-control studies.
-\emph{American Journal of Epidemiology}, 160(4):301--305.
-
-\bibitem[Kennedy(2023)]{kennedy2023optimal}
-Kennedy, E.~H. (2023).
-Towards optimal doubly robust estimation of heterogeneous causal effects.
-\emph{Electronic Journal of Statistics}, 17(2). arXiv:2004.14497.
-
-\bibitem[Richardson et~al.(2017)]{richardson2017modeling}
-Richardson, T.~S., Robins, J.~M., and Wang, L. (2017).
-On modeling and estimation for the relative risk and risk difference.
-\emph{Journal of the American Statistical Association}, 112(519):1121--1130.
+\bibitem[X5 Retail(2020)]{x5retail2020}
+X5 Retail Hero Uplift Competition (2020).
+\url{https://retailhero.ai/}.
 
 \bibitem[Yadlowsky et~al.(2021)]{yadlowsky2021ratio}
 Yadlowsky, S., Pellegrini, F., Lionetto, F., Braune, S., and Tian, L. (2021).
 Estimation and validation of ratio-based conditional average treatment effects using observational data.
 \emph{Journal of the American Statistical Association}, 116(536):1946--1960.
 
+\bibitem[Zou(2004)]{zou2004modified}
+Zou, G. (2004).
+A modified Poisson regression approach to prospective studies with binary data.
+\emph{American Journal of Epidemiology}, 159(7):702--706.
 
 \end{thebibliography}
 
@@ -1347,6 +1323,27 @@ Estimation and validation of ratio-based conditional average treatment effects u
 % APPENDIX
 %==============================================================================
 \appendix
+
+
+
+
+
+
+
+\section{Numerical Stability through Clipping}
+\label{app:clipping}
+For numerical stability, we recommend the following clipping bounds as good starting points:
+\begin{itemize}
+    \item \textbf{Propensity scores}: Clip $\hat{e}(x)$ to $[\epsilon_e, 1-\epsilon_e]$ with $\epsilon_e = 0.01$
+    \item \textbf{Outcome probabilities}: Clip $\hat{\mu}_w(x)$ to $[\epsilon_\mu, 1-\epsilon_\mu]$ with $\epsilon_\mu = 0.001$
+    \item \textbf{Marginal conversion}: Clip $\hat{m}(x)$ to $[\epsilon_m, 1]$ with $\epsilon_m = 0.001$
+    \item \textbf{Converter propensity}: Clip $\hat{p}(x)$ to $[\epsilon_p, 1-\epsilon_p]$ with $\epsilon_p = 0.01$
+    \item \textbf{Pseudo-outcomes}: Clip $\Gamma^{\text{DR}}$ to $[\epsilon_\tau, 1/\epsilon_\tau]$ with $\epsilon_\tau = 0.01$
+    \item \textbf{Log-scale pseudo-outcomes}: Clip $\Gamma^{\text{DR}}_{\log}$ to $[-C, C]$ with $C = 10$
+\end{itemize}
+While these can serve as a good starting point, in practice we recommend treating the clipping parameters as hyperparameters subject to optimization.
+
+
 
 \section{Full Benchmark Results}
 \label{app:sec:full-results}
@@ -1369,7 +1366,11 @@ values (with standard errors).
 \mathrm{Qini}_S$ on the seven RCT datasets, sorted by ascending
 conversion rate. Green cells indicate that the learner beats the
 S-Learner; red cells indicate the opposite; neutral grey cells are
-not statistically distinguishable from S at $z = 1.96$.}
+not statistically distinguishable from S at $z = 1.96$ (paired test).
+Cells where the learner's Qini is negative are flagged in deep red
+(``Qini~$<$~0''), since the ratio breaks down. Colour is on a
+$\log_2$ scale (saturating at $\geq 4\times$ / $\leq 0.25\times$);
+cell text shows the linear ratio.}
 \label{fig:heatmap-qini-rct}
 \end{figure}
 
@@ -1382,7 +1383,9 @@ ascending conversion rate. Green cells indicate that the learner beats
 the S-Learner; red cells indicate the opposite; neutral grey cells are
 not statistically distinguishable from S at $z = 1.96$ (paired test).
 Cells where the learner's Qini is negative are flagged in deep red
-(``Qini~$<$~0''), since the ratio breaks down.}
+(``Qini~$<$~0''), since the ratio breaks down. Colour is on a
+$\log_2$ scale (saturating at $\geq 4\times$ / $\leq 0.25\times$);
+cell text shows the linear ratio.}
 \label{fig:heatmap-qini-obs}
 \end{figure}
 
@@ -1391,7 +1394,7 @@ Cells where the learner's Qini is negative are flagged in deep red
 \begin{table}[H]
 \centering
 \footnotesize
-\caption{Qini coefficient (ratio CATE) on RCT datasets (mean over seeds; SE in parentheses). Best per column in \textbf{bold}.Bottom row: mean across all learners per dataset.}
+\caption{Qini coefficient (ratio CATE) on RCT datasets (mean over seeds; SE in parentheses). Best per column in \textbf{bold}. Bottom row: mean across all learners per dataset. The horizontal rule separates the standard non-DR baselines (S, T, X, R) from the DR and Q-family variants.}
 \label{tab:qini-ratio-rct}
 \setlength{\tabcolsep}{3pt}
 \begin{tabular}{l | rrrrrrr}
@@ -1455,7 +1458,7 @@ DR-Q-Simple log
 \begin{table}[H]
 \centering
 \footnotesize
-\caption{Qini coefficient (ratio CATE) on observational datasets (mean over seeds; SE in parentheses). Best per column in \textbf{bold}.Bottom row: mean across all learners per dataset.}
+\caption{Qini coefficient (ratio CATE) on observational datasets (mean over seeds; SE in parentheses). Best per column in \textbf{bold}. Bottom row: mean across all learners per dataset. The horizontal rule separates the standard non-DR baselines (S, T, X, R) from the DR and Q-family variants.}
 \label{tab:qini-ratio-obs}
 \setlength{\tabcolsep}{3pt}
 \begin{tabular}{l | rrrr}
@@ -1510,7 +1513,7 @@ DR-Q log
 \begin{table}[H]
 \centering
 \footnotesize
-\caption{Multiplicative calibration error (ratio CATE) on RCT datasets (mean over seeds; SE in parentheses). Best per column in \textbf{bold}.}
+\caption{Multiplicative calibration error (ratio CATE) on RCT datasets (mean over seeds; SE in parentheses). Best per column in \textbf{bold}. Bottom row: mean across all learners per dataset. The horizontal rule separates the standard non-DR baselines (S, T, X, R) from the DR and Q-family variants.}
 \label{tab:cal-ratio-rct}
 \setlength{\tabcolsep}{3pt}
 \begin{tabular}{l | rrrrrrr}
@@ -1574,7 +1577,7 @@ DR-Q-Simple log
 \begin{table}[H]
 \centering
 \footnotesize
-\caption{Multiplicative calibration error (ratio CATE) on observational datasets (mean over seeds; SE in parentheses). Best per column in \textbf{bold}.}
+\caption{Multiplicative calibration error (ratio CATE) on observational datasets (mean over seeds; SE in parentheses). Best per column in \textbf{bold}. Bottom row: mean across all learners per dataset. The horizontal rule separates the standard non-DR baselines (S, T, X, R) from the DR and Q-family variants.}
 \label{tab:cal-ratio-obs}
 \setlength{\tabcolsep}{3pt}
 \begin{tabular}{l | rrrr}
@@ -1623,27 +1626,6 @@ DR-Q log
 \hline
 \end{tabular}
 \end{table}
-
-
-
-
-
-
-
-
-\section{Numerical Stability through Clipping}
-\label{app:clipping}
-For numerical stability, we recommend the following clipping bounds as good starting points:
-\begin{itemize}
-    \item \textbf{Propensity scores}: Clip $\hat{e}(x)$ to $[\epsilon_e, 1-\epsilon_e]$ with $\epsilon_e = 0.01$
-    \item \textbf{Outcome probabilities}: Clip $\hat{\mu}_w(x)$ to $[\epsilon_\mu, 1-\epsilon_\mu]$ with $\epsilon_\mu = 0.001$
-    \item \textbf{Marginal conversion}: Clip $\hat{m}(x)$ to $[\epsilon_m, 1]$ with $\epsilon_m = 0.001$
-    \item \textbf{Converter propensity}: Clip $\hat{p}(x)$ to $[\epsilon_p, 1-\epsilon_p]$ with $\epsilon_p = 0.01$
-    \item \textbf{Pseudo-outcomes}: Clip $\Gamma^{\text{DR}}$ to $[\epsilon_\tau, 1/\epsilon_\tau]$ with $\epsilon_\tau = 0.01$
-    \item \textbf{Log-scale pseudo-outcomes}: Clip $\Gamma^{\text{DR}}_{\log}$ to $[-C, C]$ with $C = 10$
-\end{itemize}
-While these can serve as a good starting point, in practice we recommend treating the clipping parameters as hyperparameters subject to optimization.
-
 
 
 
