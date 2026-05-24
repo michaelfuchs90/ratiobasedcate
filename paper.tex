@@ -498,7 +498,11 @@ estimators are \emph{oracle-efficient} in the sense of
 \citet{kennedy2022semiparametric} when nuisance estimates converge at
 sufficiently fast rates: regressing the pseudo-outcome $\Gamma$ on $X$
 then achieves the same convergence rate as if the true nuisance functions
-were known.
+were known. As a corollary, since our pseudo-outcomes are constructed
+from the efficient influence function for $\E[\tau(X)]$, the sample
+average $n^{-1}\sum_i \Gamma_i$ provides a semiparametrically efficient
+estimator of the expected conditional ratio in the classical ATE
+sense \citep{robins1994estimation, chernozhukov2018double}.
 
 The ratio CATE $\tau(x) = \mu_1(x)/\mu_0(x)$ admits two natural
 parameterizations: through outcome models $(\mu_1, \mu_0)$ or through
@@ -764,6 +768,17 @@ and confounding is present. This separation reflects the fundamentally
 different estimation challenges and allows us to test the theoretical
 distinction between classical and conditional double robustness.
 
+We restrict the benchmark to real-world data. Synthetic and
+semi-synthetic benchmarks (IHDP, ACIC2016) fix the data-generating
+process and can systematically favour learners whose inductive
+biases match the chosen covariate--treatment--outcome dependencies
+\citep{curth2021neglected}. Because our paper is aimed at the
+practitioner who must choose a learner without ground truth, we
+evaluate on the same kind of data the practitioner will see. The
+Twins dataset is a partial exception in that both potential outcomes
+are recorded, but we use it as a propensity-randomised RCT and do
+not exploit the counterfactual labels.
+
 \begin{table}[h]
 \centering
 \caption{RCT benchmark datasets. Propensity $e(x)$ is known by design.
@@ -822,7 +837,18 @@ $\hat{\tau}_{\text{ratio}} = 1 + \hat{\tau}_{\text{diff}}/\hat{\mu}_0$.
 
 
 \paragraph{Metrics.}
-We evaluate two complementary metrics. The \emph{Qini coefficient}
+We evaluate two complementary metrics, chosen because they
+correspond to the two main operational uses of $\hat{\tau}(x)$.
+For targeting, we need to order individuals correctly by treatment
+effect; the absolute scale of $\hat{\tau}(x)$ does not matter as long
+as the ranking is right. We measure this via the \emph{Qini
+coefficient}.
+For quantifying impact, the absolute scale matters: when realised
+lift is reported back on a ranked cohort, the average prediction in
+the cohort must match the empirical effect within it. We measure
+this via the \emph{multiplicative calibration error}.
+
+The \emph{Qini coefficient}
 measures ranking quality: how well a learner identifies individuals with
 the highest treatment effect. We adapt the normalized Qini
 coefficient~\citep{radcliffe2011} to ratio-based effects by integrating
@@ -835,8 +861,12 @@ where $\hat{Y}^{(w)}(s)$ is the mean outcome in arm $w$ among the
 top-$s$ fraction ranked by predicted $\hat{\tau}(x)$ from learner $l$
 on dataset $d$. Higher is better.
 
-The \emph{multiplicative calibration error} measures how accurately
-predicted effect sizes match realized effects. We compute the error on
+The \emph{multiplicative calibration error} measures cohort-level
+predictive accuracy: whether the average predicted effect within a
+score-defined bucket matches the within-bucket empirical ratio --- the
+level at which realised lift is reported. This is distinct from
+pointwise CATE accuracy, which we cannot measure without ground
+truth. We compute the error on
 the log scale, where over- and under-prediction are treated
 symmetrically ($\log(0.8) = -\log(1.25)$), then exponentiate to obtain
 an interpretable multiplicative factor:
@@ -852,15 +882,12 @@ empirical ratio within that bin ($B = 10$ equal-frequency bins). A
 CalError of $1.0\times$ indicates perfect calibration; $1.5\times$ means
 predictions are on average off by a factor of 1.5.
 
-We regard Qini as more important than calibration: ranking failures
-cannot be undone, while miscalibration is recoverable. A preliminary
-investigation suggests the calibration gap from Q-style learners is
-well captured by a simple linear transformation, with the recalibration
-parameters stable across base learners (LightGBM, XGBoost, CatBoost)
-and across temporal splits --- suggesting that the miscalibration is a
-structural property of the propensity-classifier training rather than
-dataset-specific noise. A thorough analysis of post-hoc recalibration
-is beyond this paper's scope; we report raw CalError values throughout.
+We regard Qini as more important than calibration. A learner with
+strong ranking but poor calibration can be repaired post-hoc by any
+monotone recalibration step, whereas a well-calibrated learner with
+poor ranking is unrecoverable: no transformation that is monotone in
+$\hat{\tau}$ can re-order units. We report raw CalError values
+throughout.
 
 \paragraph{Comparing learner performance.}
 We judge every learner by its capability to outperform standard ML
@@ -917,7 +944,7 @@ Section~\ref{sec:ranking-obs}.
 \label{sec:ranking-rct}
 
 On RCT data the best learner varies heavily across datasets, so for
-optimal results all candidates should be checked. Still, clear
+optimal results all candidates should be evaluated. Still, clear
 patterns emerge that suggest standard procedures for the
 practitioner. Underlying per-dataset values and heatmaps are deferred
 to Appendix~\ref{app:sec:full-results}.
@@ -982,6 +1009,7 @@ reaches $0.089$. Outside of this failure mode Q-Simple remains a
 competitive, computationally cheaper alternative when known
 propensity makes it applicable.
 
+
 \subsubsection{Observational Datasets}
 \label{sec:ranking-obs}
 On observational data, where propensity must be estimated and
@@ -993,10 +1021,8 @@ practitioner's go-to choice once confounding is in play.
 
 The proposed ratio-DR learners take the top spot on three of four
 observational datasets, while the single loss is to the R-Learner on
-RHC; since the R-Learner is unremarkable on the other three
-observational datasets (and on the RCT panel as well), we read this as
-an isolated quirk of the RHC data rather than evidence for an
-alternative recipe.
+RHC. Since the R-Learner is unremarkable on the other three
+observational datasets (and on the RCT panel as well), we interpret this as an idiosyncrasy of the RHC data-generating process rather than a systematic advantage of the R-Learner.
 Figure~\ref{fig:obs-new-vs-rest} summarises this picture by plotting
 the best proposed ratio-DR learner against the best non-DR competitor for each
 observational dataset, with the R-Learner overlaid as a dotted line
@@ -1012,7 +1038,7 @@ confounded data.
 \includegraphics[width=0.65\textwidth]{fig_obs_new_vs_rest.png}
 \caption{Qini ratio to the S-Learner on the four observational datasets, sorted by conversion rate. The two solid lines track
   the best of the proposed ratio-DR family against the best of the rest (T, Q, Q-Simple, X, DR); the per-group winner is
-   labelled by name. The R-Learner is overlaid as a dotted line. Values above the red baseline ($R = 1$) beat standard
+  labelled by name. The R-Learner is overlaid as a dotted line. Values above the red baseline ($R = 1$) beat standard
   ML (the S-Learner). \emph{Observation:} the best proposed ratio-DR learner beats every other learner on every dataset
   except RHC, where the otherwise unremarkable R-Learner finishes higher.}
 \label{fig:obs-new-vs-rest}
@@ -1026,10 +1052,8 @@ direct-scale DR can even take the lead. The mechanism is the one that
 motivated the log transform in
 Section~\ref{sec:log-scale}: when $\mu_0(x)$ is small, direct-scale
 pseudo-outcomes are inflated by a $1/\hat{\mu}_0(x)$ factor that
-turns small denominator errors into large pseudo-outcome swings,
-whereas the log transform replaces the division with a subtraction
-and stabilises the regression target. On the higher-conversion
-datasets this risk is reduced, and the direct scale's lower bias
+turns small denominator estimation errors into severe numerical instability. The log transform replaces the division with a subtraction, effectively stabilising the regression target. On the higher-conversion
+datasets, this risk is reduced, and the direct scale's lower bias
 becomes attractive again.
 
 \paragraph{DR-Q vs.\ DR-S/T.}
@@ -1048,16 +1072,14 @@ good propensity estimation.
 \subsection{Calibration Analysis}
 \label{sec:calibration}
 
-Calibration tells a one-sentence story: the \textbf{S-Learner is the
+The calibration analysis yields a definitive conclusion: the \textbf{S-Learner serves as the
 best- or near-best-calibrated method on every dataset}. It wins
 outright on six of eleven datasets and loses by a tight margin on the
 other five. Direct-scale DR variants are persistently miscalibrated
 by factors of $2$--$10\times$ the S-Learner; log-scale DR variants,
 the X- and R-comparators, and the plug-in T- and Q-Learners fall in
 between. Per-dataset values are in Tables~\ref{tab:cal-ratio-rct} and
-\ref{tab:cal-ratio-obs} (Appendix~\ref{app:sec:full-results}). The
-Q-style miscalibration is recoverable via a simple linear post-hoc
-transformation, as noted in Section~\ref{sec:experiments-setup}.
+\ref{tab:cal-ratio-obs} (Appendix~\ref{app:sec:full-results}).
 
 
 \subsection{Summary and Practical Guidance}
@@ -1080,12 +1102,14 @@ the following default choices:
 Our evaluation uses binary outcomes, a single base learner (LightGBM with
 default hyperparameters), and fixed clipping thresholds. Results may
 differ with learner-specific hyperparameter tuning, other model classes,
-or continuous outcomes. The observational datasets are small
-($n = 1.6$k--$9.2$k), limiting the precision of comparisons. Without
-access to true CATEs, we evaluate ranking and calibration but cannot
-assess pointwise estimation accuracy.
-
-
+or continuous outcomes. Furthermore, while the observational datasets reflect standard causal inference benchmarks, their moderate sample sizes ($n = 1.6$k--$9.2$k) inherently bound the precision of out-of-sample comparisons. Without access to true CATEs, we evaluate ranking and calibration but cannot
+assess pointwise estimation accuracy. A more principled cross-learner
+model-selection metric on this front is the DR-loss of
+\citet{kennedy2023optimal}, which uses a held-out DR pseudo-outcome to
+estimate CATE-MSE up to an additive constant; adopting it in the
+ratio setting requires a separate cross-fitting fold for the
+evaluation pseudo-outcome and is a natural extension of this
+benchmark.
 
 
 \section{Conclusion}
@@ -1096,9 +1120,9 @@ decomposes $\tau(x)$ into a product of odds ratios via a Bayes-rule
 identity, reducing estimation to two binary classification tasks that
 directly optimize the treatment effect estimate. As a special case we
 outlined the Q-Simple Learner, which estimates $\tau$ on the converter
-subset only --- applicable when only converter data is available. We
-derived doubly robust augmentations for both outcome-regression-based
-(DR-S/T) and Q-Learner-based (DR-Q) ratio estimators, and characterized
+subset only---applicable when only converter data is available and the 
+design propensity is known. We derived doubly robust augmentations for 
+both outcome-regression-based (DR-S/T) and Q-Learner-based (DR-Q) ratio estimators, and characterized
 their distinct robustness properties: classical double robustness for
 DR-S/T versus conditional robustness for DR-Q.
 
@@ -1112,7 +1136,6 @@ variant introduced in this paper takes the top spot on three of
 four datasets, while remaining among the leading methods on the
 fourth.
 
-
 Ultimately, these results highlight a structural limitation in
 applying existing CATE estimators---in particular difference-based
 methods---to ratio problems. Division by baseline estimates
@@ -1121,24 +1144,14 @@ regions, and breaks doubly robust guarantees. The methods
 introduced here---the Q-Learner's factorization into classification
 tasks for low-conversion experiments, and the DR augmentations for
 observational settings---demonstrate that targeting the ratio
-functional directly is the right answer in both regimes the
+functional directly is the right answer in both regimes that the 
 literature has so far underserved.
 
-Several avenues for future work remain. This work focuses on point
-estimation and rank-ordering; quantifying the uncertainty of
-ratio-based effects remains a critical challenge because of error
-propagation in the denominator. The influence functions established
-here provide a natural foundation for asymptotic confidence
-intervals, and---because our doubly robust augmentations yield valid
-pseudo-outcomes---applying conformal inference frameworks
-\citep{lei2021conformal} directly to these scores offers a promising
-path to exact finite-sample prediction intervals. Beyond inference,
-the framework invites natural extensions to continuous and
-time-to-event outcomes. Finally, learner-specific hyperparameter
-tuning is an important practical next step for the Q-Learner: since
-its component classifiers directly optimize the $\hat{\tau}(x)$
-estimand, customised tuning likely offers greater performance
-leverage than it would for standard difference-based meta-learners.
+Several natural extensions build directly on the theoretical foundations established in this work. While our empirical evaluation focuses on point estimation and rank-ordering, the proposed framework inherently facilitates uncertainty quantification---a task traditionally hindered by error propagation in the denominator of ratio-based effects. Specifically, the influence functions derived here provide a direct basis for constructing asymptotic confidence intervals. More importantly, because our doubly robust augmentations yield valid, individual-level pseudo-outcomes, state-of-the-art conformal inference frameworks \citep{lei2021conformal} can be applied directly to these scores to construct exact finite-sample prediction intervals, elegantly bypassing the unstable asymptotic approximations usually required for ratios. Beyond inference, the framework invites natural extensions to continuous and time-to-event outcomes. Finally, learner-specific hyperparameter tuning represents a high-leverage practical step for the Q-Learner: because its component classifiers directly optimize the target estimand $\hat{\tau}(x)$, customized tuning is expected to yield significantly greater performance gains than it would for standard difference-based meta-learners.
+
+Several avenues for future work remain. The most concrete is learner-specific hyperparameter tuning: because the Q-Learner's component classifiers directly optimise the target estimand $\hat\tau(x)$, customised tuning is likely to yield greater gains than for difference-based meta-learners. A second open direction is uncertainty quantification, which is traditionally hindered by error propagation in the denominator of ratio-based effects. The influence functions established here provide a foundation for asymptotic confidence intervals; the DR pseudo-outcomes also open the door to conformal prediction approaches \citep{lei2021conformal}, though adapting these to ratio CATEs is non-trivial.
+
+Several avenues for future work remain. This work focuses on point estimation and rank-ordering; quantifying the uncertainty of ratio-based effects remains a critical challenge because of error propagation in the denominator. The influence functions established here provide a natural foundation for asymptotic confidence intervals, and---because our doubly robust augmentations yield valid pseudo-outcomes---applying conformal inference frameworks \citep{lei2021conformal} directly to these scores offers a promising path to exact finite-sample prediction intervals. Beyond inference, the framework invites natural extensions to continuous and time-to-event outcomes. Finally, learner-specific hyperparameter tuning is an important practical next step for the Q-Learner: since its component classifiers directly optimize the $\hat{\tau}(x)$ estimand, customised tuning likely offers greater performance leverage than it would for standard difference-based meta-learners.
 
 \paragraph{Code and data availability.}
 All code, dataset loaders, and scripts to reproduce the experiments in
@@ -1149,15 +1162,12 @@ generates all figures and tables, and a README with replication
 instructions.
 
 \paragraph{Author contributions.}
-M.F.\ conceived the project, developed the Q-Learner and the doubly robust
-augmentations, derived the theoretical results, designed and conducted all
-empirical experiments, and wrote the manuscript. D.K.\ engaged in conceptual discussions and assisted with editing and refining the manuscript.
 
+M.F.\ conceived the project, developed the Q-Learner and the doubly robust augmentations, derived the theoretical results, designed and conducted all empirical experiments, and wrote the manuscript. D.K.\ engaged in conceptual discussions and contributed to the structural refinement and finalization of the manuscript.
 
 \paragraph{Acknowledgements.}
 We thank Marco Breitig and Kristina Weidner for valuable comments on
-the manuscript. We are particularly grateful to Marco Breitig for
-identifying a crucial mistake in an earlier version of the draft.
+the manuscript. 
 
 %==============================================================================
 % REFERENCES
@@ -1204,6 +1214,11 @@ Double/debiased machine learning for treatment and structural parameters.
 Connors, A.~F., Speroff, T., Dawson, N.~V., et~al. (1996).
 The effectiveness of right heart catheterization in the initial care of critically ill patients.
 \emph{JAMA}, 276(11):889--897.
+
+\bibitem[Curth and van der Schaar(2021)]{curth2021neglected}
+Curth, A. and van der Schaar, M. (2021).
+Doing great at estimating CATE? On the neglected assumptions in benchmark comparisons of treatment effect estimators.
+\emph{arXiv preprint arXiv:2107.13346}.
 
 \bibitem[Diemert et~al.(2018)]{diemert2018}
 Diemert, E., Betlei, A., Renaudin, C., and Amini, M.~R. (2018).
