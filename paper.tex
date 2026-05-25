@@ -13,6 +13,7 @@
 \usepackage{graphicx}
 \usepackage{natbib}
 \usepackage{float}
+\usepackage{amssymb}
 % Pass options to hyperref before it is loaded transitively by `doi`
 \PassOptionsToPackage{hypertexnames=false}{hyperref}
 \usepackage{doi} % loads hyperref internally
@@ -47,11 +48,11 @@
 %   Munich, Germany \\
 % }
 \author{
-  Michael Fuchs\thanks{Corresponding author.} \quad Dominik Kreiss \\
+  Michael Fuchs\thanks{Corresponding author.} \qquad Dominik Kreiss \\
   Actuarial Department \\
   Allianz Versicherungs-AG \\
   Munich, Germany \\
-  \texttt{michael.fuchs@outlook.de}
+  \texttt{michael.fuchs@outlook.de} \quad \texttt{kreissdominik@gmail.com}
 }
 
 \renewcommand{\shorttitle}{Doubly Robust Meta-Learners for Ratio-Based Treatment Effects}
@@ -89,7 +90,7 @@ observational data.
 \end{abstract}
 
 
-% keywords can be removed
+
 \keywords{Ratio-based CATE \and Doubly Robust Estimation \and Meta-Learner \and Uplift Modeling}
 
 \section{Introduction}
@@ -320,14 +321,15 @@ In practice, regions where $\mu_0(x)$ is very small lead to unstable
 estimates; we address this through clipping (Appendix~\ref{app:clipping}).
 
 Beyond these standard quantities, the Q-Learner
-(Section~\ref{sec:q-learner}) relies on two additional objects:
+(Section~\ref{sec:q-learner}) and its DR variant
+(Section~\ref{sec:dr-q}) rely on two additional objects:
 \begin{itemize}
     \item The \textbf{converter propensity}
     $p(x) = P(W{=}1 \mid Y{=}1, X{=}x)$: the probability of having been
     treated, conditional on a positive outcome.
     \item The \textbf{marginal conversion probability}
     $m(x) = P(Y{=}1 \mid X{=}x)$: the unconditional outcome rate given
-    covariates.
+    covariates, used by the DR-Q variant only.
 \end{itemize}
 
 %==============================================================================
@@ -477,7 +479,7 @@ RCTs.
 \section{Doubly Robust Extensions}
 \label{sec:dr}
 The Q-Learner and the naive ratio estimator $\hat{\mu}_1(x)/\hat{\mu}_0(x)$
-(T-Learner) are plug-in estimators: they combine estimated nuisance
+(S- and T-Learner) are plug-in estimators: they combine estimated nuisance
 functions into $\hat{\tau}(x)$ without correction for estimation error. If any nuisance model is misspecified,
 bias propagates directly into the CATE estimate.
 
@@ -514,8 +516,7 @@ knowledge.
 
 \subsection{DR-S/T: Augmenting the Ratio via Outcome Models}
 \label{sec:dr-t}
-
-Both estimate $\hat{\tau}(x) = \hat{\mu}_1(x)/\hat{\mu}_0(x)$ as a plug-in ratio and share the following augmentation. The
+Both the S- and T-Learners estimate $\hat{\tau}(x) = \hat{\mu}_1(x)/\hat{\mu}_0(x)$ as a plug-in ratio and share the following augmentation. The
 standard AIPW influence functions for the response surfaces are:
 \begin{align}
 \phi_{\mu_1}(W, Y, X; x) &= \frac{W(Y - \mu_1(x))}{e(x)}, \\
@@ -754,6 +755,8 @@ Section~\ref{sec:experiments-setup} describes the benchmark protocol;
 Section~\ref{sec:ranking} reports the ranking results;
 Section~\ref{sec:calibration} reports calibration; and
 Section~\ref{sec:summary} concludes with practical recommendations.
+Full per-dataset Qini values and standard errors are in
+Appendix~\ref{app:sec:full-results}.
 
 
 \subsection{Setup}
@@ -882,17 +885,15 @@ empirical ratio within that bin ($B = 10$ equal-frequency bins). A
 CalError of $1.0\times$ indicates perfect calibration; $1.5\times$ means
 predictions are on average off by a factor of 1.5.
 
-We regard Qini as more important than calibration. A learner with
-strong ranking but poor calibration can be repaired post-hoc by any
-monotone recalibration step, whereas a well-calibrated learner with
-poor ranking is unrecoverable: no transformation that is monotone in
-$\hat{\tau}$ can re-order units. We report raw CalError values
-throughout.
-
 \paragraph{Comparing learner performance.}
-We judge every learner by its capability to outperform standard ML
-(the S-Learner) --- only then is the meta-learner's existence
-justified. For this reason we evaluate
+We regard Qini as the primary metric: a learner with strong ranking
+but poor calibration can be repaired post-hoc by a monotone
+recalibration step, whereas a well-calibrated learner with poor
+ranking is unrecoverable, since no transformation that is monotone
+in $\hat{\tau}$ can re-order units. Within Qini, we judge every
+learner by its capability
+to outperform standard ML (the S-Learner) --- only then is the
+meta-learner's existence justified. For this reason we evaluate
 \begin{equation}
 \label{eq:qini-ratio}
 R_l(d) = \frac{\mathrm{Qini}_l(d)}{\mathrm{Qini}_S(d)},
@@ -913,10 +914,8 @@ noisier datasets, where this paired test failed to reach significance
 at lower counts. Since $R_l(d)$ values vary heavily across datasets,
 we refrain from cross-dataset aggregation: any aggregate would be
 dominated by a small number of datasets. Calibration is reported on raw scale
-(Section~\ref{sec:calibration}); since the S-Learner dominates
-calibration on every dataset, no normalization is needed there.
-Full per-dataset Qini values and standard errors are in
-Appendix~\ref{app:sec:full-results}.
+(Section~\ref{sec:calibration}); since the S-Learner is at or near the top on calibration on every
+dataset, no normalization is needed there.
 
 
 
@@ -951,7 +950,7 @@ to Appendix~\ref{app:sec:full-results}.
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=1\textwidth]{fig_rct_dots.png}
+\includegraphics[width=0.8\textwidth]{fig_rct_dots.png}
 \caption{Qini ratio to the S-Learner across the seven RCT datasets, sorted by conversion rate. Each dot is one non-baseline
   learner; colour denotes group (DR vs.\ non-DR). Values above the red baseline ($R = 1$) beat
   standard ML (the S-Learner). The
@@ -965,7 +964,7 @@ to Appendix~\ref{app:sec:full-results}.
 Figure~\ref{fig:rct-dr-vs-nondr} shows the DR and non-DR clouds
 overlapping on every dataset: a DR variant occasionally takes the
 top spot, but neither group is consistently ahead of the other.
-Theory predicts exactly this: when propensity is known by design and
+When propensity is known by design and
 no confounding can arise, plug-in learners already identify the
 CATE, so the DR correction has no structural advantage to offer.
 
@@ -978,7 +977,7 @@ motivates ratio-CATEs, standard ML (S-Learner) is enough.
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=0.65\textwidth]{fig_rct_learners.png}
+\includegraphics[width=0.55\textwidth]{fig_rct_learners.png}
 \caption{Qini ratio to the S-Learner on the four low-conversion RCT datasets. Values above the red baseline ($R = 1$) beat
   standard ML (the S-Learner). The three learners that most often beat S --- Q-Learner, DR-Q-Simple and X-Learner ---
   are shown as coloured lines; the remaining non-baseline learners are shown as grey dots. Of the three, the Q-Learner
@@ -993,12 +992,11 @@ S-Learner on three of the four low-conversion datasets; the single
 exception is Twins, where Q sits at $0.82$ of the dataset best --- a
 significant loss against S, but small in absolute terms. Only two
 other learners match Q's win count: DR-Q-Simple (three significant
-wins) and X (two wins, one tie). But when comparing the actual
-ratios, Q is clearly ahead of both: averaged across the four
-low-conversion datasets, $\mathrm{Qini}_l / \mathrm{Qini}_{\max}$ is
-$0.83$ for Q against $0.64$ for DR-Q-Simple and $0.62$ for X,
-reflecting the visibly larger swings of the latter two across
-datasets.
+wins) and X (two wins, one tie). Pairwise, Q beats DR-Q-Simple on
+three of four datasets and X on three of four; the losses are
+confined to single datasets in each comparison (Hillstrom (Conv) for
+DR-Q-Simple, Criteo for X), while DR-Q-Simple and X both swing more
+widely across the panel.
 
 \paragraph{Q-Learner vs.\ Q-Simple.}
 The per-dataset values in Appendix~\ref{app:sec:full-results} show
@@ -1035,7 +1033,7 @@ confounded data.
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=0.65\textwidth]{fig_obs_new_vs_rest.png}
+\includegraphics[width=0.55\textwidth]{fig_obs_new_vs_rest.png}
 \caption{Qini ratio to the S-Learner on the four observational datasets, sorted by conversion rate. The two solid lines track
   the best of the proposed ratio-DR family against the best of the rest (T, Q, Q-Simple, X, DR); the per-group winner is
   labelled by name. The R-Learner is overlaid as a dotted line. Values above the red baseline ($R = 1$) beat standard
@@ -1065,7 +1063,8 @@ robustness, while DR-S/T retain the classical double-robust guarantee,
 so a residual gap was expected. The cleanest read on this gap comes
 from the log-scale variants, which share a variance-stabilised scale
 and isolate the robustness comparison: DR-Q log narrowly leads on JTPA,
-ties DR-S/T log on NHEFS, and lags only modestly on Cattaneo and RHC. The conditional-robustness penalty is therefore mild, suggesting
+trails DR-S/T log by under 5\% on NHEFS, and lags only modestly on
+Cattaneo and RHC. The conditional-robustness penalty is therefore mild, suggesting
 good propensity estimation.
 
 
@@ -1101,8 +1100,8 @@ the following default choices:
 \paragraph{Limitations.}
 Our evaluation uses binary outcomes, a single base learner (LightGBM with
 default hyperparameters), and fixed clipping thresholds. Results may
-differ with learner-specific hyperparameter tuning, other model classes,
-or continuous outcomes. Furthermore, while the observational datasets reflect standard causal inference benchmarks, their moderate sample sizes ($n = 1.6$k--$9.2$k) inherently bound the precision of out-of-sample comparisons. Without access to true CATEs, we evaluate ranking and calibration but cannot
+differ with learner-specific hyperparameter tuning or other model
+classes. Furthermore, while the observational datasets reflect standard causal inference benchmarks, their moderate sample sizes ($n = 1.6$k--$9.2$k) inherently bound the precision of out-of-sample comparisons. Without access to true CATEs, we evaluate ranking and calibration but cannot
 assess pointwise estimation accuracy. A more principled cross-learner
 model-selection metric on this front is the DR-loss of
 \citet{kennedy2023optimal}, which uses a held-out DR pseudo-outcome to
@@ -1147,11 +1146,10 @@ observational settings---demonstrate that targeting the ratio
 functional directly is the right answer in both regimes that the 
 literature has so far underserved.
 
-Several natural extensions build directly on the theoretical foundations established in this work. While our empirical evaluation focuses on point estimation and rank-ordering, the proposed framework inherently facilitates uncertainty quantification---a task traditionally hindered by error propagation in the denominator of ratio-based effects. Specifically, the influence functions derived here provide a direct basis for constructing asymptotic confidence intervals. More importantly, because our doubly robust augmentations yield valid, individual-level pseudo-outcomes, state-of-the-art conformal inference frameworks \citep{lei2021conformal} can be applied directly to these scores to construct exact finite-sample prediction intervals, elegantly bypassing the unstable asymptotic approximations usually required for ratios. Beyond inference, the framework invites natural extensions to continuous and time-to-event outcomes. Finally, learner-specific hyperparameter tuning represents a high-leverage practical step for the Q-Learner: because its component classifiers directly optimize the target estimand $\hat{\tau}(x)$, customized tuning is expected to yield significantly greater performance gains than it would for standard difference-based meta-learners.
 
-Several avenues for future work remain. The most concrete is learner-specific hyperparameter tuning: because the Q-Learner's component classifiers directly optimise the target estimand $\hat\tau(x)$, customised tuning is likely to yield greater gains than for difference-based meta-learners. A second open direction is uncertainty quantification, which is traditionally hindered by error propagation in the denominator of ratio-based effects. The influence functions established here provide a foundation for asymptotic confidence intervals; the DR pseudo-outcomes also open the door to conformal prediction approaches \citep{lei2021conformal}, though adapting these to ratio CATEs is non-trivial.
+Several avenues for future work remain. The most concrete is learner-specific hyperparameter tuning: because the Q-Learner's component classifiers directly optimize the target estimand $\hat{\tau}(x)$, customized tuning is likely to yield greater performance gains than for difference- or outcome-model-based meta-learners.
+A second open direction is uncertainty quantification, traditionally hindered by error propagation in the denominator of ratio-based effects. The influence functions established here provide a natural foundation for asymptotic confidence intervals. Furthermore, because our doubly robust augmentations yield valid pseudo-outcomes, they open the door to state-of-the-art conformal inference frameworks \citep{lei2021conformal}. While formally establishing coverage guarantees for ratio CATEs requires dedicated theoretical care, our framework provides a path to elegantly bypass the denominator problem. 
 
-Several avenues for future work remain. This work focuses on point estimation and rank-ordering; quantifying the uncertainty of ratio-based effects remains a critical challenge because of error propagation in the denominator. The influence functions established here provide a natural foundation for asymptotic confidence intervals, and---because our doubly robust augmentations yield valid pseudo-outcomes---applying conformal inference frameworks \citep{lei2021conformal} directly to these scores offers a promising path to exact finite-sample prediction intervals. Beyond inference, the framework invites natural extensions to continuous and time-to-event outcomes. Finally, learner-specific hyperparameter tuning is an important practical next step for the Q-Learner: since its component classifiers directly optimize the $\hat{\tau}(x)$ estimand, customised tuning likely offers greater performance leverage than it would for standard difference-based meta-learners.
 
 \paragraph{Code and data availability.}
 All code, dataset loaders, and scripts to reproduce the experiments in
@@ -1240,11 +1238,6 @@ Hern{\'a}n, M.~A. and Robins, J.~M. (2020).
 \emph{Causal Inference: What If}.
 Chapman \& Hall/CRC.
 
-\bibitem[Lei and Cand{\`e}s(2021)]{lei2021conformal}
-Lei, L. and Cand{\`e}s, E.~J. (2021).
-Conformal inference of conditional average treatment effects.
-\emph{Journal of the Royal Statistical Society: Series B (Statistical Methodology)}, 83(5):811--845.
-
 \bibitem[Hillstrom(2008)]{hillstrom2008}
 Hillstrom, K. (2008).
 The MineThatData E-Mail Analytics And Data Mining Challenge.
@@ -1269,6 +1262,11 @@ Towards optimal doubly robust estimation of heterogeneous causal effects.
 K{\"u}nzel, S.~R., Sekhon, J.~S., Bickel, P.~J., and Yu, B. (2019).
 Metalearners for estimating heterogeneous treatment effects using machine learning.
 \emph{PNAS}, 116(10):4156--4165.
+
+\bibitem[Lei and Cand{\`e}s(2021)]{lei2021conformal}
+Lei, L. and Cand{\`e}s, E.~J. (2021).
+Conformal inference of conditional average treatment effects.
+\emph{Journal of the Royal Statistical Society: Series B (Statistical Methodology)}, 83(5):811--845.
 
 \bibitem[Lenta(2021)]{lenta2021}
 Lenta Uplift Modeling Dataset (2021).
@@ -1337,13 +1335,8 @@ A modified Poisson regression approach to prospective studies with binary data.
 %==============================================================================
 % APPENDIX
 %==============================================================================
+\newpage
 \appendix
-
-
-
-
-
-
 
 \section{Numerical Stability through Clipping}
 \label{app:clipping}
@@ -1357,8 +1350,6 @@ For numerical stability, we recommend the following clipping bounds as good star
     \item \textbf{Log-scale pseudo-outcomes}: Clip $\Gamma^{\text{DR}}_{\log}$ to $[-C, C]$ with $C = 10$
 \end{itemize}
 While these can serve as a good starting point, in practice we recommend treating the clipping parameters as hyperparameters subject to optimization.
-
-
 
 \section{Full Benchmark Results}
 \label{app:sec:full-results}
@@ -1376,7 +1367,7 @@ values (with standard errors).
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{fig_heatmap_qini_ratio_rct.png}
+\includegraphics[width=0.6\textwidth]{fig_heatmap_qini_ratio_rct.png}
 \caption{Per-(learner, dataset) heatmap of $\mathrm{Qini}_l /
 \mathrm{Qini}_S$ on the seven RCT datasets, sorted by ascending
 conversion rate. Green cells indicate that the learner beats the
@@ -1391,7 +1382,7 @@ cell text shows the linear ratio.}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.6\textwidth]{fig_heatmap_qini_ratio_obs.png}
+\includegraphics[width=0.4\textwidth]{fig_heatmap_qini_ratio_obs.png}
 \caption{Per-(learner, dataset) heatmap of $\mathrm{Qini}_l /
 \mathrm{Qini}_S$ on the four observational datasets, sorted by
 ascending conversion rate. Green cells indicate that the learner beats
@@ -1405,13 +1396,13 @@ cell text shows the linear ratio.}
 \end{figure}
 
 
-
 \begin{table}[H]
 \centering
 \footnotesize
 \caption{Qini coefficient (ratio CATE) on RCT datasets (mean over seeds; SE in parentheses). Best per column in \textbf{bold}. Bottom row: mean across all learners per dataset. The horizontal rule separates the standard non-DR baselines (S, T, X, R) from the DR and Q-family variants.}
 \label{tab:qini-ratio-rct}
 \setlength{\tabcolsep}{3pt}
+\resizebox{0.5\textwidth}{!}{%
 \begin{tabular}{l | rrrrrrr}
 \hline
 Learner & H(Conv) & Twins & Criteo & Lenta & H(Vis) & MegaFon & X5 \\
@@ -1465,7 +1456,8 @@ DR-Q-Simple log
 \hline
 \textit{Dataset mean} & 0.321 & 0.049 & 0.436 & 0.020 & 0.312 & 1.316 & 0.057 \\
 \hline
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 
@@ -1476,6 +1468,7 @@ DR-Q-Simple log
 \caption{Qini coefficient (ratio CATE) on observational datasets (mean over seeds; SE in parentheses). Best per column in \textbf{bold}. Bottom row: mean across all learners per dataset. The horizontal rule separates the standard non-DR baselines (S, T, X, R) from the DR and Q-family variants.}
 \label{tab:qini-ratio-obs}
 \setlength{\tabcolsep}{3pt}
+\resizebox{0.31\textwidth}{!}{%
 \begin{tabular}{l | rrrr}
 \hline
 Learner & Cattaneo & NHEFS & JTPA & RHC \\
@@ -1520,7 +1513,8 @@ DR-Q log
 \hline
 \textit{Dataset mean} & 0.915 & 0.062 & 0.029 & 0.054 \\
 \hline
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 
@@ -1531,6 +1525,7 @@ DR-Q log
 \caption{Multiplicative calibration error (ratio CATE) on RCT datasets (mean over seeds; SE in parentheses). Best per column in \textbf{bold}. Bottom row: mean across all learners per dataset. The horizontal rule separates the standard non-DR baselines (S, T, X, R) from the DR and Q-family variants.}
 \label{tab:cal-ratio-rct}
 \setlength{\tabcolsep}{3pt}
+\resizebox{0.5\textwidth}{!}{%
 \begin{tabular}{l | rrrrrrr}
 \hline
 Learner & H(Conv) & Twins & Criteo & Lenta & H(Vis) & MegaFon & X5 \\
@@ -1584,7 +1579,8 @@ DR-Q-Simple log
 \hline
 \textit{Dataset mean} & 4.260 & 2.100 & 1.353 & 1.541 & 1.882 & 1.484 & 1.184 \\
 \hline
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 
@@ -1595,6 +1591,7 @@ DR-Q-Simple log
 \caption{Multiplicative calibration error (ratio CATE) on observational datasets (mean over seeds; SE in parentheses). Best per column in \textbf{bold}. Bottom row: mean across all learners per dataset. The horizontal rule separates the standard non-DR baselines (S, T, X, R) from the DR and Q-family variants.}
 \label{tab:cal-ratio-obs}
 \setlength{\tabcolsep}{3pt}
+\resizebox{0.31\textwidth}{!}{%
 \begin{tabular}{l | rrrr}
 \hline
 Learner & Cattaneo & NHEFS & JTPA & RHC \\
@@ -1639,7 +1636,8 @@ DR-Q log
 \hline
 \textit{Dataset mean} & 5.323 & 5.651 & 1.512 & 1.239 \\
 \hline
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 
