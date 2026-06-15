@@ -2,8 +2,8 @@
 
 Code and data accompanying the paper
 **"Beyond Differences: Doubly Robust Meta-Learners for Ratio-Based Treatment Effects"**
-(Fuchs & Kreiß, 2026).
-<!-- AUTHOR-TODO: Replace XXXX.XXXXX with arXiv ID once assigned, then fill in the BibTeX in the Citation section below. -->
+(Fuchs & Kreiß, 2026), available on arXiv:
+[arXiv:2605.26288](https://arxiv.org/abs/2605.26288).
 
 ## Overview
 
@@ -188,14 +188,12 @@ well as this paper.
 
 ## Citation
 
-<!-- AUTHOR-TODO: Replace arXiv ID once assigned. -->
-
 ```bibtex
 @article{fuchs2026ratiocate,
   title   = {Beyond Differences: Doubly Robust Meta-Learners for
              Ratio-Based Treatment Effects},
   author  = {Fuchs, Michael and Krei{\ss}, Dominik},
-  journal = {arXiv preprint arXiv:XXXX.XXXXX},
+  journal = {arXiv preprint arXiv:2605.26288},
   year    = {2026}
 }
 ```
@@ -203,7 +201,8 @@ well as this paper.
 ## License
 
 - **Code**: MIT License — see `LICENSE`.
-- **Paper text and figures**: distributed on arXiv under arXiv's default
+- **Paper text and figures**: distributed on
+  [arXiv](https://arxiv.org/abs/2605.26288) under arXiv's default
   non-exclusive licence for distribution.
 - **Dataset files** in `data/raw/` retain the licences of their original
   sources. See the *Datasets* section above.
