@@ -23,7 +23,7 @@ from metrics import qini_coefficient_ratio, calibration_ratio
 STEST_LEARNERS = ['S', 'S_tuned', 'S-Qini_tuned', 'Q-Simple', 'Q-Simple_tuned', 'Q-Simple-Qini_tuned']
 STEST_CELLS = [d for d in RCT_DATASETS if not d.endswith('_all')]
 STEST_SEEDS = [42, 43, 44, 45, 46]  # first five benchmark seeds
-STEST_CSV = 'stest_boot.csv'
+STEST_CSV = 'results/stest_boot.csv'
 
 
 def _scores(tau, W, Y) -> dict:

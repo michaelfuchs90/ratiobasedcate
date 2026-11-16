@@ -22,7 +22,7 @@ from sklearn.metrics import get_scorer
 from sklearn.model_selection import StratifiedKFold
 
 from datasets import get_dataset
-from benchmark import ipw_weights, load_tuned_params
+from benchmark import ipw_weights, load_tuned_params, TUNED_PARAMS_CSV
 from learner import LGBM_PARAMS, SLearner, QLearner, QSimpleLearner
 from metrics import qini_coefficient_ratio
 
@@ -31,7 +31,6 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 TUNING_SEEDS = range(9000, 9002)
 N_FOLDS = 5
 N_TRIALS = 100
-TUNED_PARAMS_CSV = 'tuned_params.csv'
 NEG_LOG_LOSS = get_scorer('neg_log_loss')
 
 # Enqueued as the first trial so TPE always evaluates a known-good region.

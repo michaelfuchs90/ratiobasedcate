@@ -255,14 +255,14 @@ Closest to our setting, \citet{yadlowsky2021ratio} propose a doubly
 robust estimator for the ratio-based CATE restricted to a log-linear
 semiparametric model, $\tau(x) = \exp(\beta_0^\top x)$. Our work imposes no
 parametric structure on $\tau(x)$, introduces the Q-Learner
-parameterisation, which in its plug-in form requires no outcome
+parameterization, which in its plug-in form requires no outcome
 regression, and its orthogonal augmentations. Causal
 forests \citep{athey2019grf} estimate heterogeneous effects via local
 moment conditions and can in principle target non-standard functionals,
 but do not provide an out-of-the-box estimator or efficiency theory for
 the ratio CATE. \citet{vanderlaan2024combining} propose EP-learning for
 causal contrasts including the conditional relative risk, motivated by
-the instability of DR-learners whose pseudo-outcomes violate the bounds
+the instability of DR-Learners whose pseudo-outcomes violate the bounds
 of the estimand --- the failure mode we observe for our augmentations in
 Section~\ref{sec:experiments-v2}.
 
@@ -271,8 +271,8 @@ Log-binomial and modified Poisson regression
 \citep{zou2004modified} estimate marginal or
 conditionally linear relative risks but cannot capture nonlinear
 heterogeneity. \citet{richardson2017modeling} develop a semiparametric
-framework for the joint modelling of the relative risk and the risk
-difference, characterising the nuisance tangent space for these
+framework for the joint modeling of the relative risk and the risk
+difference, characterizing the nuisance tangent space for these
 functionals. \citet{shirvaikar2023} modify causal forests to target
 relative risk via GLM-based node splitting; their approach retains a
 GLM-based splitting criterion and does not provide doubly robust
@@ -296,7 +296,7 @@ of this paper: \citet{ge2026orthogonal} independently develop
 orthogonal (DR- and R-Learner-style) machine learning for conditional
 odds and risk ratios, deriving orthogonal risk functions whose
 pseudo-outcomes satisfy second-order remainder properties analogous
-to the ATE case. Their DR-learner for the risk ratio coincides with our
+to the ATE case. Their DR-Learner for the risk ratio coincides with our
 DR-T augmentation, on both the direct and the log scale, which was
 developed independently; the Q-Learner and the augmentations DR-Q and
 DR-Q-Simple are not part of their work.
@@ -308,8 +308,8 @@ sampling conditions on the outcome and odds-based quantities remain
 identifiable \citep{prentice1979}. In biostatistics, the identity
 behind the Q-Simple-Learner is known as the \emph{case-only} estimator
 of treatment effects on the relative-risk scale in randomized trials
-\citep{vittinghoff2006case, dai2018case, dai2019trees}; the Q-Simple
-Learner coincides with it. Its observational variant
+\citep{vittinghoff2006case, dai2018case, dai2019trees}; the Q-Simple-Learner
+coincides with it. Its observational variant
 \citep{tchetgen2010semiparametric} targets parametric interactions and
 does not identify $\tau(x)$ itself. To our knowledge, this line of work
 has not been connected to the CATE and meta-learner literature; we
@@ -733,7 +733,7 @@ probability: only $\hat{p}$ and the known $e$ enter. The
 simplification comes at a cost in asymptotic efficiency.
  
 % =============================================================================
-\providecommand{\figorpending}[2]{\IfFileExists{#1}{\includegraphics[width=#2]{#1}}{\pending{figure \detokenize{#1}: run Benchmark.ipynb}}}
+\providecommand{\figorpending}[2]{\IfFileExists{figures/#1}{\includegraphics[width=#2]{figures/#1}}{\pending{figure \detokenize{#1}: run Benchmark.ipynb}}}
 
 \section{Empirical Evaluation}
 \label{sec:experiments-v2}
@@ -770,7 +770,7 @@ rescales $\mu_0$ and leaves $\tau(x)$ unchanged, so the conversion rate ($0.2$,
 $1$, $5$, $20\%$) and the number of training converters ($50$ to $12{,}800$)
 can be varied independently. The training size follows as
 $n_{\text{train}} = n_{\text{conv}}/\mathrm{CVR}$, which gives $36$
-synthetic datasets along which the behaviour of each learner can be traced
+synthetic datasets along which the behavior of each learner can be traced
 ($33$ for the tuned variants, whose tuning at the $0.2\%$ rate stops at
 $1600$ converters). In a confounded variant, the propensity depends on the
 same feature that drives the baseline, $\operatorname{logit} e(x) = 0.8\,
@@ -791,7 +791,7 @@ where a dataset has more, drawn at its natural conversion rate
 \centering
 \caption{Randomized datasets, sorted by conversion rate. Propensity known by
 design; converters in the $80\%$ training pool. H(Conv), H(Vis): Hillstrom
-with conversion or visit as outcome, both e-mail arms count as treated;
+with conversion or visit as outcome, both email arms count as treated;
 Criteo: outcome is a visit. $^\dagger$Both potential outcomes
 observed, treatment simulated with $e = 0.5$.}
 \label{tab:rct-v2}
@@ -912,7 +912,7 @@ All models are LightGBM~\citep{lightgbm} classifiers or regressors with
 library defaults, except for the tuned variants; the R- and all DR-Learners
 cross-fit their nuisance models over $5$ folds~\citep{chernozhukov2018double}. Following the defaults of
 EconML~\citep{econml}, we apply no truncation of $\hat e$ and no
-winsorisation of pseudo-outcomes, only numerical guards
+winsorization of pseudo-outcomes, only numerical guards
 (Appendix~\ref{app:tuning}). Each synthetic dataset is run with $10$ seeds,
 each real-world dataset with $30$ due to the noisier metrics; results are
 averaged over seeds (geometric mean for the calibration error).
@@ -943,10 +943,10 @@ observed ratio estimates the same average and the constant meets it up to
 noise. On our synthetic data it therefore scores a binned error about as low
 as the true $\tau(x)$, although its pointwise error is about $1.4$, and lower than
 a prediction that ranks correctly but has only half the true spread. As an
-objective, the binned error would favour models without heterogeneity;
+objective, the binned error would favor models without heterogeneity;
 together with the slope, it serves as a check of a chosen model, not as a
 criterion for choosing one. Only for the Q-Simple-Learner does a standard,
-optimisable objective measure the error of $\log\hat\tau$ itself: its
+optimizable objective measure the error of $\log\hat\tau$ itself: its
 log-loss is a converter-weighted squared error of $\log\hat\tau$
 (Section~\ref{sec:q-simple}).
 
@@ -1198,13 +1198,13 @@ the R-Learner of \citet{ge2026orthogonal} or the case-only forests of
 \citet{dai2019trees}, and we do not evaluate the use of converter-only
 features.
 On real data, the tuning splits share units with the evaluation test sets,
-which may favour the tuned variants, Qini tuning most. Non-positive ratios
+which may favor the tuned variants, Qini tuning most. Non-positive ratios
 from the difference-based learners and the direct-scale augmentations enter
 the calibration error at a floor of $10^{-10}$, so for these learners its
 magnitude reflects the floor rather
 than a typical error. The synthetic data follow a single effect surface,
-which with $p = \tau/(1+\tau)$ is a favourable case for the Q-Simple-Learner,
-and their rate knob favours the converter-count result by construction; the
+which with $p = \tau/(1+\tau)$ is a favorable case for the Q-Simple-Learner,
+and their rate knob favors the converter-count result by construction; the
 confounded variant covers one design at a single conversion rate. Finally,
 the observational datasets hold too little data for the heterogeneity they
 carry to support conclusions.
@@ -1219,7 +1219,7 @@ log-loss is aligned with the effect: tuning the classifiers in the standard
 way tunes $\hat\tau(x)$ itself. With a known propensity, it reduces to the
 Q-Simple-Learner, a single classifier fitted on the converters only, which
 applies when detailed data are available only for the converters. We further derived
-Neyman-orthogonal augmentations of the Q- and Q-Simple-Learner on the direct
+Neyman-orthogonal augmentations of the Q- and Q-Simple-Learners on the direct
 and log scale; since the ratio is a nonlinear functional, their guarantee is
 weaker than classical double robustness, as a quadratic remainder survives.
 
@@ -1273,7 +1273,7 @@ instructions.
 
 M.F.\ conceived the project, developed the Q-Learner and the Neyman-orthogonal augmentations, derived the theoretical results, designed and conducted all empirical experiments, and wrote the manuscript. D.K.\ engaged in conceptual discussions and contributed to the structural refinement and finalization of the manuscript.
 
-\paragraph{Acknowledgements.}
+\paragraph{Acknowledgments.}
 We thank Marco Breitig and Kristina Weidner for valuable comments on
 the manuscript, and Thomas Nagler, Julian Rodemann, and Lars van der
 Laan for detailed feedback on the first arXiv version that shaped
@@ -1393,7 +1393,7 @@ LightGBM: A highly efficient gradient boosting decision tree.
 \bibitem[Kennedy(2022)]{kennedy2022semiparametric}
 Kennedy, E.~H. (2022).
 Semiparametric doubly robust targeted double machine learning: a review.
-\emph{arXiv:2203.06469}.
+\emph{arXiv preprint arXiv:2203.06469}.
 
 \bibitem[Kennedy(2023)]{kennedy2023optimal}
 Kennedy, E.~H. (2023).
@@ -1530,7 +1530,7 @@ A modified Poisson regression approach to prospective studies with binary data.
 \newpage
 \appendix
 
-\section{Log-loss and calibration of Q-Simple}
+\section{Log-Loss and Calibration of Q-Simple}
 \label{app:q-simple}
 
 Throughout, $e$ is known, $\hat\tau=\frac{\hat p}{1-\hat p}\cdot\frac{1-e}{e}$,
@@ -1579,7 +1579,7 @@ $\frac{q}{1-q}=\frac{P(W=1,Y=1\mid S)}{P(W=0,Y=1\mid S)}=\frac{e\,\mathbb{E}[\mu
 and $\mathbb{E}[Y\mid W=w,S]=\mathbb{E}[\mu_w(X)\mid S]$.
 \end{proof}
 
-Minimising the converter log-loss thus minimises a weighted squared error
+Minimizing the converter log-loss thus minimizes a weighted squared error
 of $\log\hat\tau$, with weights proportional to $m(x)\,p(x)(1-p(x))$: the fit
 is the effect error, but measured where the converters are. Regions with a
 low conversion probability carry little weight, which is the price of
@@ -1630,7 +1630,7 @@ unit is a row drawn with replacement from a fixed random subsample of
 $500{,}000$ Criteo records, restricted to eight of its twelve features
 ($f_0, f_2, f_3, f_5, f_6, f_7, f_9, f_{10}$), dropping two that are nearly
 constant and two that are nearly redundant with retained ones; the learners see these eight
-raw features. For the outcome model we standardise them over the subsample to
+raw features. For the outcome model we standardize them over the subsample to
 $z_k$, with mean zero and unit variance, and set
 \begin{align*}
   \mu_0(x) &= s\,\sigma\bigl(b(x)\bigr), &
@@ -1642,7 +1642,7 @@ $z_k$, with mean zero and unit variance, and set
 where $\sigma$ is the logistic function and $S_{m,\,v}$ rescales a surface
 over the drawn sample to mean $m$ and standard deviation $v$. The effect
 thus uses a different feature mix than the baseline, includes an interaction
-and a non-linearity, and is held fixed across the grid. The scale $s$ is solved
+and a nonlinearity, and is held fixed across the grid. The scale $s$ is solved
 for numerically so that the marginal conversion rate
 $\tfrac12\,\mathbb{E}[\mu_1] + \tfrac12\,\mathbb{E}[\mu_0]$ matches the target
 rate; this is the conversion-rate knob, which leaves $\tau(x)$ unchanged.
@@ -1781,7 +1781,7 @@ of seeds, limits what can be resolved.
 \label{app:syn-extra}
 
 \paragraph{Is the binned calibration a usable proxy?}
-On real data only the binned calibration error of Eq.~\eqref{eq:cal-binned-v2}
+On real data only the binned calibration error of Equation~\eqref{eq:cal-binned-v2}
 is available, so we check it against the pointwise version on the synthetic
 datasets, where both can be computed. Across all runs the two errors have a
 rank correlation of $0.90$, and within a dataset the two orderings of the
@@ -1796,7 +1796,7 @@ are below $0.02$ log units, and one of the S- against the Q-Simple-Learner
 at the $0.2\%$ rate. The median binned slope is close to the pointwise one,
 and the binned bias lies a median $0.13$ log units from the pointwise bias.
 The absolute levels differ: even the true
-$\tau(x)$ scores a binned error of $1.04$ at a $20\%$ to $1.25$ at a $0.2\%$
+$\tau(x)$ scores a binned error from $1.04$ at a $20\%$ to $1.25$ at a $0.2\%$
 conversion rate, since the test set has a fixed size. We therefore read the
 binned error only together with its slope, and only to compare learners.
 
@@ -2037,7 +2037,7 @@ Q (Qini) & 0.415$^\dagger$ & 0.657$^\dagger$ & 0.735$^\dagger$ \\
 \caption{Pointwise calibration error on the confounded synthetic data
 (geometric mean over $10$ seeds). Second line: share of seeds whose slope lies in
 $[0.8, 1.25]$. Best per column in bold; $^\dagger$ as in
-Table~\ref{tab:app-synthconf-qini}.}
+Table~\ref{tab:app-synthconf-qini}; $\infty$: at least one run with an infinite error; `--': no slope.}
 \label{tab:app-synthconf-cal}
 \footnotesize
 \setlength{\tabcolsep}{3pt}
@@ -2243,7 +2243,7 @@ factor of seven on the two small datasets, since an untruncated $\hat e$
 enters $\hat\tau$ directly. On the confounded synthetic data, the tuned
 Q-Learner calibrates as well as the S-Learner
 (Section~\ref{sec:syn-conf-v2}), which points to the small samples rather
-than the estimated propensity. The metrics use self-normalised inverse
+than the estimated propensity. The metrics use self-normalized inverse
 propensity weights $1/\hat e$ and $1/(1-\hat e)$, with $\hat e$ from the same
 LightGBM propensity model the learners use. On Cattaneo and NHEFS, with about
 $230$ and $250$ training converters and about $36$ and $44$ control converters

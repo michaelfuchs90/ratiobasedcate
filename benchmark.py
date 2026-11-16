@@ -26,7 +26,7 @@ from metrics import qini_coefficient_ratio, calibration_ratio
 # '<name>_tuned' uses the params tune.py stored for <name>; *-Qini: tuned on CV Qini.
 TUNED_SUFFIX = '_tuned'
 TUNED_MODEL = {'S-Qini': 'S', 'Q-Simple-Qini': 'Q-Simple', 'Q-Qini': 'Q'}  # tuned-params row -> learner class
-TUNED_PARAMS_CSV = 'tuned_params.csv'
+TUNED_PARAMS_CSV = 'results/tuned_params.csv'
 
 
 def load_tuned_params(path: str = TUNED_PARAMS_CSV) -> dict:

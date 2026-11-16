@@ -57,13 +57,15 @@ learners (`X`, `R`, `DR`) implement `predict_difference_cate` instead of `predic
 learner.py          all learners
 metrics.py          ratio Qini (oracle and count-based, optionally IPW-weighted), calibration
 datasets.py         loaders: synthetic DGP, randomized and observational datasets
-tune.py             Optuna tuning (CV log-loss or CV Qini) -> tuned_params.csv
-benchmark.py        resume-aware benchmark loop -> results_{synthetic,synthconf,rct,obs}.csv
-stest.py            variance factors of the corrected resampled t-test (stest_*.csv)
+tune.py             Optuna tuning (CV log-loss or CV Qini) -> results/tuned_params.csv
+benchmark.py        resume-aware benchmark loop -> results/results_{synthetic,synthconf,rct,obs}.csv
+stest.py            variance factors of the corrected resampled t-test (results/stest_*.csv)
 visualization.py    figures and tables of the paper
 Benchmark.ipynb     runs everything above and writes every figure and table of paper.tex
+results/            all result CSVs (tuning, benchmark, t-test, oracle Qini)
+figures/            the six figures as written by the notebook
 tables/             the tables as written by the notebook
-paper.tex           paper source (fig_*.png, arxiv.sty)
+paper.tex           paper source (figures/, arxiv.sty)
 data/raw/           redistributed raw data (see below)
 ```
 
@@ -72,8 +74,7 @@ data/raw/           redistributed raw data (see below)
 Run `Benchmark.ipynb` top to bottom. With the shipped CSVs, tuning (section 3), benchmark and
 significance diagnostic (section 4) find nothing left to do (they resume from the CSVs), and
 sections 6-7 regenerate the six figures and write all tables to `tables/` (and into `paper.tex`). To recompute
-from scratch, delete `tuned_params.csv`, `results_*.csv`, `stest_*.csv` and
-`oracle_synthetic.csv`; tuning the synthetic datasets alone took about 150 hours.
+from scratch, delete the CSVs in `results/`; tuning the synthetic datasets alone took about 150 hours.
 Even then, the notebook loads every dataset (for the significance diagnostic and the dataset
 tables), so Criteo (several GB) is downloaded and Lenta must be placed manually (see below).
 `N_JOBS` and `n_jobs` in the notebook assume a large machine; lower them if needed.

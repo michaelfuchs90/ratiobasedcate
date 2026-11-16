@@ -73,7 +73,7 @@ def _cvr_label(cvr: float) -> str:
     return f'{cvr:.1%}'.replace('.0%', '%')
 
 
-def load_synthetic(path: str = 'results_synthetic.csv') -> pd.DataFrame:
+def load_synthetic(path: str = 'results/results_synthetic.csv') -> pd.DataFrame:
     """Valid result rows (``error`` empty) with ``cvr`` and ``conv`` columns."""
     df = pd.read_csv(path)
     return _add_cell(df[df['error'].isna()])
@@ -388,7 +388,7 @@ def _tuning_titles(axes, corridor: tuple):
 # else the classic Nadeau-Bengio factor n_test / n_train = 0.25.
 
 RCT_NB = 0.25
-STEST_SUMMARY = 'stest_summary.csv'
+STEST_SUMMARY = 'results/stest_summary.csv'
 _STEST_METRIC = {('qini_ratio', False): 'qini_ratio', ('cal_binned', True): 'log_cal_binned'}
 
 
@@ -409,7 +409,7 @@ def _add_rct_cell(df: pd.DataFrame) -> pd.DataFrame:
     return df.assign(base=pd.Categorical(base, RCT_BASES, ordered=True), lvl=lvl, conv=conv)
 
 
-def load_rct(path: str = 'results_rct.csv') -> pd.DataFrame:
+def load_rct(path: str = 'results/results_rct.csv') -> pd.DataFrame:
     """Valid result rows (``error`` empty) with ``base``, ``lvl`` ('12800' or
     'all' = whole pool) and ``conv`` columns."""
     df = pd.read_csv(path)
@@ -452,7 +452,7 @@ def plot_rct_tuning(df: pd.DataFrame, corridor: tuple = (0.8, 1.25), cal_max: fl
 # The *_ipw columns reweight with 1/e_hat (same LightGBM nuisance as the
 # learners); train overlap across seeds -> factor 0.25.
 
-def load_obs(path: str = 'results_obs.csv') -> pd.DataFrame:
+def load_obs(path: str = 'results/results_obs.csv') -> pd.DataFrame:
     """Valid result rows (``error`` empty)."""
     df = pd.read_csv(path)
     return df[df['error'].isna()]
