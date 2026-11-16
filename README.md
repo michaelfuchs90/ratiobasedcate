@@ -1,7 +1,7 @@
 # Ratio-CATE: The Q-Learner
 
 Code, data and results for the paper
-**"Beyond Differences: Meta-Learners for Ratio-Based Treatment Effects"** (Fuchs & Kreiss, 2026), [arXiv:2605.26288](https://arxiv.org/abs/2605.26288).
+**"Beyond Differences: Estimating and Tuning Ratio-Based Treatment Effects"** (Fuchs & Kreiss, 2026), [arXiv:2605.26288](https://arxiv.org/abs/2605.26288).
 
 When a treatment effect is a ratio, the estimand is the ratio-based CATE
 
@@ -84,9 +84,9 @@ training pool).
 |---|---|---|---|
 | Hillstrom (H(Vis), H(Conv)) | RCT | [Hillstrom 2008](https://blog.minethatdata.com/2008/03/minethatdata-e-mail-analytics-and-data.html) | `scikit-uplift` download |
 | Criteo | RCT | [Diemert et al. 2018](https://ailab.criteo.com/criteo-uplift-prediction-dataset/) | `scikit-uplift` download |
-| MegaFon | RCT | [MegaFon 2019](https://ods.ai/competitions/megafon-df21-chegg) | `scikit-uplift` download |
+| MegaFon | RCT | [MegaFon 2021](https://ods.ai/competitions/megafon-df21-chegg) | `scikit-uplift` download |
 | X5 Retail | RCT | [X5 Retail 2020](https://ods.ai/competitions/x5-retailhero-uplift-modeling) | `scikit-uplift` download |
-| Lenta | RCT | [Lenta 2021](https://www.uplift-modeling.com/en/latest/api/datasets/fetch_lenta.html) | manual: place [`lenta_dataset.csv.gz`](https://sklift.s3.eu-west-2.amazonaws.com/lenta_dataset.csv.gz) in `data/raw/` |
+| Lenta | RCT | [Lenta 2020](https://www.uplift-modeling.com/en/latest/api/datasets/fetch_lenta.html) | manual: place [`lenta_dataset.csv.gz`](https://sklift.s3.eu-west-2.amazonaws.com/lenta_dataset.csv.gz) in `data/raw/` |
 | Twins | semi-synthetic | [Louizos et al. 2017](https://github.com/AMLab-Amsterdam/CEVAE) | `data/raw/twin_pairs_*.csv` |
 | Cattaneo | observational | [Cattaneo 2010](https://raw.githubusercontent.com/scunning1975/mixtape/master/cattaneo2.dta) | `data/raw/cattaneo2.dta` |
 | NHEFS | observational | [Hernán & Robins 2020](https://www.hsph.harvard.edu/miguel-hernan/causal-inference-book/) | `data/raw/nhefs.csv` |
@@ -100,7 +100,7 @@ cite its original source as well as this paper.
 
 ```bibtex
 @article{fuchs2026ratiocate,
-  title   = {Beyond Differences: Meta-Learners for Ratio-Based Treatment Effects},
+  title   = {Beyond Differences: Estimating and Tuning Ratio-Based Treatment Effects},
   author  = {Fuchs, Michael and Krei{\ss}, Dominik},
   journal = {arXiv preprint arXiv:2605.26288},
   year    = {2026}
