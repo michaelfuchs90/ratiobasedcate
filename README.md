@@ -1,58 +1,25 @@
-# Ratio-CATE: Doubly Robust Meta-Learners for Ratio-Based Treatment Effects
+# Ratio-CATE: The Q-Learner
 
-Code and data accompanying the paper
-**"Beyond Differences: Doubly Robust Meta-Learners for Ratio-Based Treatment Effects"**
-(Fuchs & Kreiß, 2026), available on arXiv:
-[arXiv:2605.26288](https://arxiv.org/abs/2605.26288).
+Code, data and results for the paper
+**"Beyond Differences: Meta-Learners for Ratio-Based Treatment Effects"** (Fuchs & Kreiss, 2026), [arXiv:2605.26288](https://arxiv.org/abs/2605.26288).
 
-## Overview
-
-Many decisions depend on the *relative* lift produced by a treatment rather
-than the absolute difference — think "how many times more likely is this
-customer to buy if we email them?" or "what is the relative mortality
-reduction under this therapy?" When this is the question, the right
-estimand is the **ratio-based Conditional Average Treatment Effect**:
+When a treatment effect is a ratio, the estimand is the ratio-based CATE
 
 ```
 τ(x) = E[Y | W = 1, X = x] / E[Y | W = 0, X = x].
 ```
 
-This repository implements the methods proposed in the paper:
-
-- The **Q-Learner**, which expresses `τ(x)` through a Bayes-rule
-  decomposition into a product of two odds ratios, reducing ratio-CATE
-  estimation for binary outcomes to two binary classification tasks.
-  As a special case, the **Q-Simple Learner** uses only the converter
-  subset and is applicable when the propensity `e(x)` is known.
-- **Doubly robust extensions** of the S-, T-, Q-, and Q-Simple
-  Learners, in both direct- and log-scale variants, with differing
-  robustness guarantees: classical double robustness for DR-S/DR-T,
-  conditional robustness for DR-Q.
-- The Qini coefficient adapted to ratio effects, and a bin-level
-  log-absolute calibration error on the multiplicative scale.
-
-Empirical highlights from the paper:
-
-- **RCTs split by conversion rate.** On the three high-conversion
-  RCTs (X5, MegaFon, Criteo), the plain S-Learner sits within a hair
-  of the dataset winner — no causal meta-learner is needed. On the
-  four low-conversion RCTs (H(Conv), Twins, Criteo, Lenta), the
-  **Q-Learner** is the most consistent choice, significantly beating
-  the S-Learner on three of four datasets. No DR variant is
-  consistently ahead of the leading plug-in on RCT data.
-- **Observational data: DR earns its keep.** On the four
-  observational datasets (Cattaneo, NHEFS, JTPA, RHC), a DR variant
-  introduced here takes the top spot on three of four; on RHC the
-  R-Learner edges them out. Among DR variants, log-scale dominates at
-  low conversion rates (Cattaneo, NHEFS) and direct-scale becomes
-  competitive at higher conversion rates (JTPA, RHC).
-- **Calibration.** The S-Learner is the best- or near-best-calibrated
-  method on every dataset; direct-scale DR variants are persistently
-  miscalibrated by factors of 2–10×.
+The **Q-Learner** writes τ(x) as a ratio of two odds and so reduces ratio-CATE
+estimation for binary outcomes to two classification tasks: the treatment propensity among
+converters, p(x) = P(W = 1 | X = x, Y = 1), and the propensity e(x). Tuning these classifiers
+on log-loss tunes the effect estimate itself. The **Q-Simple-Learner** uses the known constant
+propensity of randomized data. The repository also contains the S-, T-, X-, R- and AIPW-DR
+learners, doubly robust DR-S/T/Q/Q-Simple learners in direct and log scale, the ratio Qini and
+the calibration metrics, and the full benchmark (synthetic, randomized and observational data).
 
 ## Installation
 
-Tested with **Python 3.11**.
+Tested with Python 3.11.
 
 ```bash
 git clone https://github.com/michaelfuchs90/ratiobasedcate.git
@@ -60,138 +27,80 @@ cd ratiobasedcate
 pip install -r requirements.txt
 ```
 
-The dependencies are the standard PyData stack plus
-[`scikit-uplift`](https://www.uplift-modeling.com/) (for the uplift-modeling
-dataset loaders), [`lightgbm`](https://lightgbm.readthedocs.io/), and
-`jupyter`. See `requirements.txt`.
-
-## Repository structure
-
-```
-learner.py             15 learner implementations (S/T/Q/X/R/DR and DR-S/T/Q/Q-Simple in direct + log variants)
-metrics.py             Qini and multiplicative calibration error (ratio + difference scales)
-datasets.py            Loaders for 11 benchmark datasets
-benchmark.py           Per-seed benchmark loop with idempotent CSV checkpointing
-visualization.py       Heatmaps and the regime-specific scatter / dot-cloud figures
-tables.py              LaTeX table generation
-Benchmark.ipynb        End-to-end driver: benchmark + figures + LaTeX tables
-Benchmark.html         Rendered snapshot of the notebook including figures and tables
-benchmark_results.csv  Per-seed result table (11 datasets × 15 learners × ≥50 seeds)
-data/raw/              Locally-stored CSVs for datasets not covered by sklift
-data/processed/        Feather-cached per-seed outputs (regenerable; .gitignored)
-paper.tex              Paper source
-```
-
 ## Quick start
 
 ```python
 from datasets import get_dataset
 from learner import get_learner
-from metrics import qini_coefficient_ratio, calibration_error_ratio
+from metrics import qini_coefficient_ratio, calibration_ratio
 
-# Load a dataset (returns an UpliftDataset with train/test splits)
-data = get_dataset('H(Conv)', random_state=42)
+data = get_dataset('H(Vis)_all', random_state=42)  # Hillstrom e-mail RCT, visit outcome
 
-# Instantiate and fit a Q-Learner
-learner = get_learner('Q', random_state=42)
-learner.fit(data.X_train, data.W_train, data.Y_train)
+learner = get_learner('Q-Simple', random_state=42)  # known constant propensity (RCT)
+learner.fit(data.X_train, data.W_train, data.Y_train, propensity=data.propensity_true_train)
+tau = learner.predict_ratio_cate(data.X_test)       # ratio CATE per test unit
 
-# Predict ratio CATEs on the test set
-tau = learner.predict(data.X_test)
-
-# Evaluate
-print(f"Qini    = {qini_coefficient_ratio(tau, data.W_test, data.Y_test):.3f}")
-print(f"CalEr   = {calibration_error_ratio(tau, data.W_test, data.Y_test):.3f}")
+print(qini_coefficient_ratio(tau, data.W_test, data.Y_test))
+print(calibration_ratio(tau, data.W_test, data.Y_test)['cal_binned'])
 ```
 
-Available learners (keys of `learner.ALL_LEARNER`):
-`S`, `T`, `X`, `R`, `DR`, `Q`, `Q-Simple`,
-`DR-S`, `DR-T`, `DR-Q`, `DR-Q-Simple`,
-`DR-S log`, `DR-T log`, `DR-Q log`, `DR-Q-Simple log`.
+Learners (`learner.ALL_LEARNER`): `S`, `T`, `X`, `R`, `DR`, `Q`, `Q-Simple`, `DR-S`, `DR-T`,
+`DR-Q`, `DR-Q-Simple` and the log-scale variants `DR-S log`, `DR-T log`, `DR-Q log`,
+`DR-Q-Simple log`. `Q-Simple` needs a known constant propensity, `DR-Q-Simple` a known propensity. Difference
+learners (`X`, `R`, `DR`) implement `predict_difference_cate` instead of `predict_ratio_cate`.
 
-Available datasets (keys of `datasets.ALL_DATASETS`): seven RCT
-(`H(Conv)`, `Twins`, `Criteo`, `Lenta`, `H(Vis)`, `MegaFon`, `X5`)
-and four observational (`Cattaneo`, `NHEFS`, `JTPA`, `RHC`).
+## Repository structure
+
+```
+learner.py          all learners
+metrics.py          ratio Qini (oracle and count-based, optionally IPW-weighted), calibration
+datasets.py         loaders: synthetic DGP, randomized and observational datasets
+tune.py             Optuna tuning (CV log-loss or CV Qini) -> tuned_params.csv
+benchmark.py        resume-aware benchmark loop -> results_{synthetic,synthconf,rct,obs}.csv
+stest.py            variance factors of the corrected resampled t-test (stest_*.csv)
+visualization.py    figures and tables of the paper
+Benchmark.ipynb     runs everything above and writes every figure and table of paper.tex
+paper.tex           paper source (fig_*.png, arxiv.sty)
+data/raw/           redistributed raw data (see below)
+```
 
 ## Reproducing the paper
 
-Run `Benchmark.ipynb` top-to-bottom. The full sweep (11 datasets × 15
-learners × 50–500 seeds, with extra seeds added on noisier datasets
-to reach paired-test significance) takes many hours on a workstation.
-The notebook is idempotent: on restart it resumes from
-`benchmark_results.csv` and only runs missing (dataset, learner,
-seed) combinations.
-
-After the sweep, the plotting cells regenerate
-
-- `fig_rct_dots.png` — DR vs. non-DR comparison across the seven RCT
-  datasets, sorted by conversion rate (Figure 1 of the paper).
-- `fig_rct_learners.png` — Q-Learner / X-Learner / DR-Q-Simple ratios
-  on the four low-conversion RCTs (Figure 2 of the paper).
-- `fig_obs_new_vs_rest.png` — best DR variant vs. best non-DR
-  competitor on the four observational datasets, with R-Learner
-  overlay (Figure 3 of the paper).
-- Per-(learner, dataset) heatmaps for Qini and calibration error
-  (appendix figures).
-
-The final notebook cell emits the LaTeX tables included in the
-paper's appendix (per-dataset Qini and calibration error on RCT and
-observational data).
+Run `Benchmark.ipynb` top to bottom. With the shipped CSVs, tuning (section 3), benchmark and
+significance diagnostic (section 4) find nothing left to do (they resume from the CSVs), and
+sections 6-7 regenerate the six figures and write all tables into `paper.tex`. To recompute
+from scratch, delete `tuned_params.csv`, `results_*.csv`, `stest_*.csv` and
+`oracle_synthetic.csv`; tuning the synthetic datasets alone took about 90 hours.
 
 ## Datasets
 
-Eleven datasets are included. Seven RCT, four observational. Twins is
-semi-synthetic.
+Synthetic datasets (`synthetic_<rate>_<converters>`) bootstrap their covariates from Criteo;
+`synthconf_<rate>_<converters>` is the confounded variant, with e(x) depending on the covariates
+and no design propensity.
+Randomized datasets: `<base>_12800` (12,800 training converters) or `<base>_all` (whole
+training pool).
 
-### Automatically downloaded via `scikit-uplift`
+| Dataset | Type | Source | Obtained |
+|---|---|---|---|
+| Hillstrom (H(Vis), H(Conv)) | RCT | [Hillstrom 2008](https://blog.minethatdata.com/2008/03/minethatdata-e-mail-analytics-and-data.html) | `scikit-uplift` download |
+| Criteo | RCT | [Diemert et al. 2018](https://ailab.criteo.com/criteo-uplift-prediction-dataset/) | `scikit-uplift` download |
+| MegaFon | RCT | [MegaFon 2019](https://ods.ai/competitions/megafon-df21-chegg) | `scikit-uplift` download |
+| X5 Retail | RCT | [X5 Retail 2020](https://ods.ai/competitions/x5-retailhero-uplift-modeling) | `scikit-uplift` download |
+| Lenta | RCT | [Lenta 2021](https://www.uplift-modeling.com/en/latest/api/datasets/fetch_lenta.html) | manual: place [`lenta_dataset.csv.gz`](https://sklift.s3.eu-west-2.amazonaws.com/lenta_dataset.csv.gz) in `data/raw/` |
+| Twins | semi-synthetic | [Louizos et al. 2017](https://github.com/AMLab-Amsterdam/CEVAE) | `data/raw/twin_pairs_*.csv` |
+| Cattaneo | observational | [Cattaneo 2010](https://raw.githubusercontent.com/scunning1975/mixtape/master/cattaneo2.dta) | `data/raw/cattaneo2.dta` |
+| NHEFS | observational | [Hernán & Robins 2020](https://www.hsph.harvard.edu/miguel-hernan/causal-inference-book/) | `data/raw/nhefs.csv` |
+| JTPA | observational | [Abadie et al. 2002](https://economics.mit.edu/faculty/angrist/data1/data/abangim02) | `data/raw/jtpa.csv` |
+| RHC | observational | [Connors et al. 1996](https://hbiostat.org/data/) | `data/raw/rhc.csv` |
 
-| Dataset            | Source                                        | Notes |
-|--------------------|-----------------------------------------------|-------|
-| Hillstrom (Visit)  | [Hillstrom 2008][hillstrom]                   | email marketing |
-| Hillstrom (Conv.)  | [Hillstrom 2008][hillstrom]                   | same dataset, conversion outcome |
-| Criteo             | [Diemert et al. 2018][diemert]                | display advertising |
-| MegaFon            | [MegaFon 2019][megafon]                       | telecom uplift challenge |
-| X5 Retail          | [X5 Retail 2020][x5]                          | retail personalisation challenge |
-
-[hillstrom]: https://blog.minethatdata.com/2008/03/minethatdata-e-mail-analytics-and-data.html
-[diemert]: https://ailab.criteo.com/criteo-uplift-prediction-dataset/
-[megafon]: https://ods.ai/competitions/megafon-df21-chegg
-[x5]: https://ods.ai/competitions/x5-retailhero-uplift-modeling
-
-### Manual download required
-
-| Dataset | Source | Notes |
-|---------|--------|-------|
-| Lenta   | [Lenta 2021][lenta] | The ~140 MB CSV is not redistributed in this repo. Download `lenta_dataset.csv.gz` from <https://sklift.s3.eu-west-2.amazonaws.com/lenta_dataset.csv.gz> and place it in `data/raw/`. |
-
-[lenta]: https://www.uplift-modeling.com/en/latest/api/datasets/fetch_lenta.html
-
-### Redistributed in `data/raw/`
-
-| File                                     | Source                                 | Paper citation |
-|------------------------------------------|----------------------------------------|----------------|
-| `rhc.csv`                                | Right Heart Catheterization study      | [Connors et al. 1996][rhc] |
-| `nhefs.csv`                              | NHANES-I Epidemiologic Follow-up Study | [Hernán & Robins 2020][hernan] |
-| `jtpa.csv`                               | Job Training Partnership Act study     | [Abadie et al. 2002][abadie] |
-| `cattaneo2.dta`                          | Birthweight study                      | [Cattaneo 2010][cattaneo] |
-| `twin_pairs_*.csv`                       | Twins semi-synthetic benchmark         | [Louizos et al. 2017][louizos] |
-| `lenta_dataset.csv.gz`, `clients.csv.gz`, `criteo.csv.gz`, `hillstorm_no_indices.csv.gz`, `megafon_dataset.csv.gz`, `purchases.csv.gz`, `uplift_train.csv.gz` | `scikit-uplift` caches (fetched automatically) | various (see sklift documentation) |
-
-[rhc]: https://hbiostat.org/data/
-[hernan]: https://www.hsph.harvard.edu/miguel-hernan/causal-inference-book/
-[abadie]: https://economics.mit.edu/faculty/angrist/data1/data/abangim02
-[cattaneo]: http://www.stata-press.com/data/r13/cattaneo2.dta
-[louizos]: https://github.com/AMLab-Amsterdam/CEVAE
-
-If you use any of these datasets, please cite the original source as
-well as this paper.
+Loaded datasets are cached as feather files in `data/processed/`. If you use a dataset, please
+cite its original source as well as this paper.
 
 ## Citation
 
 ```bibtex
 @article{fuchs2026ratiocate,
-  title   = {Beyond Differences: Doubly Robust Meta-Learners for
-             Ratio-Based Treatment Effects},
+  title   = {Beyond Differences: Meta-Learners for Ratio-Based Treatment Effects},
   author  = {Fuchs, Michael and Krei{\ss}, Dominik},
   journal = {arXiv preprint arXiv:2605.26288},
   year    = {2026}
@@ -200,12 +109,8 @@ well as this paper.
 
 ## License
 
-- **Code**: MIT License — see `LICENSE`.
-- **Paper text and figures**: distributed on
-  [arXiv](https://arxiv.org/abs/2605.26288) under arXiv's default
-  non-exclusive licence for distribution.
-- **Dataset files** in `data/raw/` retain the licences of their original
-  sources. See the *Datasets* section above.
+Code: MIT (see `LICENSE`). Paper text and figures: arXiv's non-exclusive distribution licence.
+Files in `data/raw/` keep the licences of their original sources.
 
 ## Contact
 

@@ -1,8 +1,15 @@
 """
 Dataset loaders for the ratio-CATE benchmark.
 
-Provides 7 RCT/semi-synthetic and 4 observational datasets through a common
-``UpliftDataset`` container with pre-computed train/test splits.
+- Synthetic: ``synthetic_<rate>_<n_conv_train>``, a 33-dataset grid of
+  conversion rate x training converter count with oracle tau(x), mu_0(x).
+  ``synthconf_<rate>_<n_conv_train>``: same DGP, confounded e(x), no design e.
+- RCT: 7 bases, each at 12,800 training converters ``<base>_12800`` or the
+  whole pool ``<base>_all`` if smaller (stratified-by-Y subsample, see
+  ``load_rct_level``).
+- Observational: Cattaneo, NHEFS, JTPA, RHC.
+
+All are ``UpliftDataset`` containers with pre-computed train/test splits.
 """
 
 import re
@@ -13,8 +20,9 @@ from dataclasses import dataclass, field
 from typing import Optional
 from sklearn.model_selection import train_test_split
 
-CACHE_DIR = Path("data/processed")
+CACHE_DIR = Path(__file__).parent / "data" / "processed"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+RAW_DIR = CACHE_DIR.parent / "raw"
 
 
 @dataclass
@@ -28,6 +36,12 @@ class UpliftDataset:
     name: str = ""
     test_size: float = 0.2
     random_state: int = 42
+    # False: the last ``test_size`` rows are the test split (caller-set split).
+    shuffle: bool = True
+    # Exact ground truth, synthetic DGP only. ``oracle_truth`` gates the
+    # pointwise/oracle metrics; an approximate tau_true must NOT set it.
+    mu0_true: Optional[np.ndarray] = None
+    oracle_truth: bool = False
 
     X_train: pd.DataFrame = field(default=None, repr=False)
     X_test: pd.DataFrame = field(default=None, repr=False)
@@ -39,13 +53,16 @@ class UpliftDataset:
     tau_true_test: np.ndarray = field(default=None, repr=False)
     propensity_true_train: np.ndarray = field(default=None, repr=False)
     propensity_true_test: np.ndarray = field(default=None, repr=False)
+    mu0_true_train: np.ndarray = field(default=None, repr=False)
+    mu0_true_test: np.ndarray = field(default=None, repr=False)
 
     def __post_init__(self):
         self.W = np.asarray(self.W, dtype=np.int32)
         self.Y = np.asarray(self.Y, dtype=np.int32)
 
         idx = np.arange(len(self.Y))
-        idx_train, idx_test = train_test_split(idx, test_size=self.test_size, random_state=self.random_state)
+        idx_train, idx_test = train_test_split(idx, test_size=self.test_size, shuffle=self.shuffle,
+                                               random_state=self.random_state if self.shuffle else None)
 
         self.X_train, self.X_test = self.X.iloc[idx_train], self.X.iloc[idx_test]
         self.W_train, self.W_test = self.W[idx_train], self.W[idx_test]
@@ -55,6 +72,8 @@ class UpliftDataset:
             self.tau_true_train, self.tau_true_test = self.tau_true[idx_train], self.tau_true[idx_test]
         if self.propensity_true is not None:
             self.propensity_true_train, self.propensity_true_test = self.propensity_true[idx_train], self.propensity_true[idx_test]
+        if self.mu0_true is not None:
+            self.mu0_true_train, self.mu0_true_test = self.mu0_true[idx_train], self.mu0_true[idx_test]
 
 
 def _prepare_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -94,25 +113,39 @@ def _load_or_fetch(name: str, fetch_fn) -> tuple[pd.DataFrame, np.ndarray, np.nd
     return X, W, Y
 
 
+def _raw(file: str, source: str) -> Path:
+    """Path of a raw file in RAW_DIR; tells where to get it if missing."""
+    path = RAW_DIR / file
+    if not path.exists():
+        raise FileNotFoundError(f"{file} not found. Place it in {RAW_DIR}/. Source: {source}")
+    return path
+
+
+def _read_lower(path: Path) -> pd.DataFrame:
+    df = pd.read_stata(path) if path.suffix == '.dta' else pd.read_csv(path)
+    df.columns = [c.lower().strip() for c in df.columns]
+    return df
+
+
+def _features(df: pd.DataFrame, exclude: set) -> pd.DataFrame:
+    return _prepare_features(df[[c for c in df.columns if c not in exclude]])
+
+
+# --- RCT bases (full data; benchmark datasets are built by load_rct_level) ----
+
 def load_hillstrom(outcome: str = 'visit', test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
     """Hillstrom Email Marketing Dataset."""
 
     def fetch():
         from sklift.datasets import fetch_hillstrom
-
-        # target_col selects which outcome (visit / conversion / spend) is loaded.
         bunch = fetch_hillstrom(target_col=outcome)
 
         df = bunch['data'].copy()
-        treatment = bunch['treatment']
-        target = bunch['target']
+        df['treatment'] = bunch['treatment']
+        df['target'] = bunch['target']
 
-        df['treatment'] = treatment
-        df['target'] = target
-
-        mask = df['treatment'].isin(['Mens E-Mail', 'Womens E-Mail', 'No E-Mail'])
-        df = df[mask]
-
+        # Both e-mail arms count as treated.
+        df = df[df['treatment'].isin(['Mens E-Mail', 'Womens E-Mail', 'No E-Mail'])]
         W = (df['treatment'] != 'No E-Mail').astype(int).values
         Y = df['target'].values
 
@@ -128,23 +161,18 @@ def load_hillstrom(outcome: str = 'visit', test_size: float = 0.2, random_state:
     return UpliftDataset(X=X, W=W, Y=Y, propensity_true=e, name=f'hillstrom_{outcome}', test_size=test_size, random_state=random_state)
 
 
-def load_criteo(sample_frac: float = 1, test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
-    """Criteo Uplift Dataset (sampled)."""
+def load_criteo(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
+    """Criteo Uplift Dataset."""
 
     def fetch():
         from sklift.datasets import fetch_criteo
         data = fetch_criteo()
         X, W, Y = data['data'].copy(), data['treatment'].values, data['target'].values
-
-        rng = np.random.RandomState(random_state)
-        idx = rng.choice(len(Y), size=int(len(Y) * sample_frac), replace=False)
-        X = X.iloc[idx].reset_index(drop=True)
-
         if not isinstance(X, pd.DataFrame):
             X = pd.DataFrame(X, columns=[f'f{i}' for i in range(X.shape[1])])
-        return X, W[idx], Y[idx]
+        return X, W, Y
 
-    X, W, Y = _load_or_fetch(f'criteo_{int(sample_frac*100)}pct', fetch)
+    X, W, Y = _load_or_fetch('criteo_100pct', fetch)
     e = np.full(len(W), W.mean())
     return UpliftDataset(X=X, W=W, Y=Y, propensity_true=e, name='criteo', test_size=test_size, random_state=random_state)
 
@@ -163,6 +191,7 @@ def load_megafon(test_size: float = 0.2, random_state: int = 42) -> UpliftDatase
     e = np.full(len(W), W.mean())
     return UpliftDataset(X=X, W=W, Y=Y, propensity_true=e, name='megafon', test_size=test_size, random_state=random_state)
 
+
 def load_x5_retail(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
     """X5 RetailHero Dataset — SMS promotion campaign."""
 
@@ -170,7 +199,6 @@ def load_x5_retail(test_size: float = 0.2, random_state: int = 42) -> UpliftData
         from sklift.datasets import fetch_x5
         data = fetch_x5()
 
-        # data['data'] is a Bunch of {clients, train, purchases}.
         clients = data['data']['clients'].copy()
         train = data['data']['train'].copy()
         purchases = data['data']['purchases'].copy()
@@ -200,333 +228,285 @@ def load_x5_retail(test_size: float = 0.2, random_state: int = 42) -> UpliftData
     return UpliftDataset(X=X, W=W, Y=Y, propensity_true=e, name='x5_retail', test_size=test_size, random_state=random_state)
 
 
-RAW_DIR = CACHE_DIR.parent / "raw"
-
-
-def load_twins(n_bins_tau: int = 50, test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
-    """Twins semi-synthetic dataset (Louizos et al., 2017).
-
-    Both potential outcomes are observed, so τ is known. Treatment is
-    simulated: W ~ Bernoulli(0.5). Source: https://github.com/AMLab-Amsterdam/CEVAE
-    """
-    rng = np.random.RandomState(random_state)
-
-    x_path = RAW_DIR / "twin_pairs_X_3years_samesex.csv"
-    y_path = RAW_DIR / "twin_pairs_Y_3years_samesex.csv"
-    t_path = RAW_DIR / "twin_pairs_T_3years_samesex.csv"
-    combined_path = RAW_DIR / "twins.csv"
-
-    if x_path.exists() and y_path.exists():
-        df_x = pd.read_csv(x_path, index_col=0)
-        df_y = pd.read_csv(y_path, index_col=0)
-        Y0 = df_y['mort_0'].values.astype(int)
-        Y1 = df_y['mort_1'].values.astype(int)
-        # NB: the "T" CEVAE file holds birth weights (covariates), not treatment.
-        if t_path.exists():
-            df_t = pd.read_csv(t_path, index_col=0)
-            df_x = pd.concat([df_x, df_t], axis=1)
-        X = df_x
-    elif combined_path.exists():
-        df = pd.read_csv(combined_path, index_col=0)
-        cols_lower = {c: c.lower().strip() for c in df.columns}
-        df.rename(columns=cols_lower, inplace=True)
-        y0_col = next((c for c in df.columns if c in ('mort_0', 'y0', 'y_0')), None)
-        y1_col = next((c for c in df.columns if c in ('mort_1', 'y1', 'y_1')), None)
-        if y0_col is None or y1_col is None:
-            raise ValueError(f"Cannot detect outcome columns. Found: {list(df.columns[:10])}...")
-        Y0 = df[y0_col].values.astype(int)
-        Y1 = df[y1_col].values.astype(int)
-        X = df.drop(columns=[y0_col, y1_col])
-    else:
-        raise FileNotFoundError(
-            f"Twins data not found in {RAW_DIR}/.\n"
-            "Expected: twin_pairs_X/Y/T_3years_samesex.csv (from CEVAE repo)\n"
-            "   or: twins.csv (combined format).\n"
-            "Source: https://github.com/AMLab-Amsterdam/CEVAE"
-        )
-
-    valid = np.isfinite(Y0) & np.isfinite(Y1)
-    X, Y0, Y1 = X.loc[valid].reset_index(drop=True), Y0[valid], Y1[valid]
-
-    X = _prepare_features(X)
-
-    # Simulated RCT, e ≡ 0.5.
-    W = rng.binomial(1, 0.5, size=len(Y0))
-    Y = np.where(W == 1, Y1, Y0)
-    e_x = np.full(len(W), 0.5)
-
-    # Ground-truth τ approximated as the empirical ratio in covariate-score bins;
-    # bins with <5 obs fall back to τ=1 to avoid noisy ratios.
-    X_num = X.select_dtypes(include=[np.number])
-    score = ((X_num - X_num.mean()) / X_num.std().clip(lower=1e-8)).sum(axis=1).values
-    bin_edges = np.percentile(score, np.linspace(0, 100, n_bins_tau + 1))
-    bins = np.clip(np.searchsorted(bin_edges[1:-1], score), 0, n_bins_tau - 1)
-
-    tau_true = np.ones(len(Y), dtype=float)
-    for b in range(n_bins_tau):
-        mask = bins == b
-        if mask.sum() >= 5:
-            mu0_bin = max(Y0[mask].mean(), 0.001)
-            mu1_bin = Y1[mask].mean()
-            tau_true[mask] = mu1_bin / mu0_bin
-
-    return UpliftDataset(X=X, W=W, Y=Y, tau_true=tau_true, propensity_true=e_x,
-                         name='twins', test_size=test_size, random_state=random_state)
-
-
-def load_lenta(sample_frac: float = 1, test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
-    """Lenta grocery retail uplift dataset (Kaggle RCT).
-
-    The raw CSV is ~140 MB and is not redistributed in this repo. Download
-    lenta_dataset.csv.gz from
-    https://sklift.s3.eu-west-2.amazonaws.com/lenta_dataset.csv.gz
-    and place it in data/raw/ before running.
-    """
+def load_lenta(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
+    """Lenta grocery retail RCT. The raw CSV (~140 MB) is not redistributed."""
     def fetch():
-        candidates = [RAW_DIR / "lenta_dataset.csv.gz", RAW_DIR / "lenta_dataset.csv",
-                      RAW_DIR / "lenta.csv", Path("lenta_dataset.csv")]
-        path = next((p for p in candidates if p.exists()), None)
-        if path is None:
-            raise FileNotFoundError(
-                f"Lenta data not found. Place lenta_dataset.csv.gz in {RAW_DIR}/.\n"
-                "Source: https://sklift.s3.eu-west-2.amazonaws.com/lenta_dataset.csv.gz"
-            )
+        df = _read_lower(_raw("lenta_dataset.csv.gz", "https://sklift.s3.eu-west-2.amazonaws.com/lenta_dataset.csv.gz"))
+        W = df['group'].map({'test': 1, 'control': 0}).values
+        Y = df['response_att'].astype(int).values
+        # response_sms / response_viber are post-treatment (they predict W).
+        return _features(df, {'group', 'response_att', 'response_sms', 'response_viber'}), W, Y
 
-        df = pd.read_csv(path)
-        cols_lower = {c: c.lower().strip() for c in df.columns}
-        df.rename(columns=cols_lower, inplace=True)
-
-        treat_col = next((c for c in df.columns if c in ('group', 'treatment_flg', 'treatment')), None)
-        if treat_col is None:
-            raise ValueError(f"Cannot detect treatment column. Found: {list(df.columns)}")
-
-        outcome_col = next((c for c in df.columns if c in ('response_att', 'target', 'response')), None)
-        if outcome_col is None:
-            raise ValueError(f"Cannot detect outcome column. Found: {list(df.columns)}")
-
-        if df[treat_col].dtype == object or pd.api.types.is_string_dtype(df[treat_col]):
-            W = df[treat_col].map({'test': 1, 'treatment': 1, 'control': 0}).values
-        else:
-            W = df[treat_col].astype(int).values
-
-        Y = df[outcome_col].astype(int).values
-
-        exclude = {treat_col, outcome_col}
-        X = df[[c for c in df.columns if c not in exclude]].copy()
-
-        rng = np.random.RandomState(random_state)
-        idx = rng.choice(len(Y), size=int(len(Y) * sample_frac), replace=False)
-        return _prepare_features(X.iloc[idx].reset_index(drop=True)), W[idx], Y[idx]
-
-    X, W, Y = _load_or_fetch(f'lenta_{int(sample_frac * 100)}pct', fetch)
+    X, W, Y = _load_or_fetch('lenta_100pct', fetch)
     e = np.full(len(W), W.mean())
     return UpliftDataset(X=X, W=W, Y=Y, propensity_true=e, name='lenta',
                          test_size=test_size, random_state=random_state)
 
 
+def load_twins(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
+    """Twins (Louizos et al., 2017): both potential outcomes observed,
+    W ~ Bernoulli(0.5) simulated per seed."""
+    src = "https://github.com/AMLab-Amsterdam/CEVAE"
+    X = pd.read_csv(_raw("twin_pairs_X_3years_samesex.csv", src), index_col=0)
+    Y01 = pd.read_csv(_raw("twin_pairs_Y_3years_samesex.csv", src), index_col=0)
+    # The T file holds birth weights (covariates), not the treatment.
+    T = pd.read_csv(_raw("twin_pairs_T_3years_samesex.csv", src), index_col=0)
+    X = _prepare_features(pd.concat([X, T], axis=1).reset_index(drop=True))
+
+    W = np.random.RandomState(random_state).binomial(1, 0.5, size=len(Y01))
+    Y = np.where(W == 1, Y01['mort_1'].values, Y01['mort_0'].values).astype(int)
+    return UpliftDataset(X=X, W=W, Y=Y, propensity_true=np.full(len(W), 0.5),
+                         name='twins', test_size=test_size, random_state=random_state)
+
+
+# --- Observational ------------------------------------------------------------
+
 def load_rhc(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
-    """Right Heart Catheterization dataset (Connors et al., 1996). Observational."""
+    """Right Heart Catheterization (Connors et al., 1996). W: RHC, Y: death within 180 days."""
     def fetch():
-        candidates = [RAW_DIR / "rhc.csv", Path("rhc.csv")]
-        path = next((p for p in candidates if p.exists()), None)
-        if path is None:
-            raise FileNotFoundError(
-                f"RHC data not found. Place rhc.csv in {RAW_DIR}/.\n"
-                "Source: https://hbiostat.org/data/repo/rhc.csv"
-            )
-
-        df = pd.read_csv(path)
-        cols_lower = {c: c.lower().strip() for c in df.columns}
-        df.rename(columns=cols_lower, inplace=True)
-
-        # Treatment: swang1 ∈ {'RHC', 'No RHC'}.
-        treat_col = next((c for c in df.columns if c in ('swang1', 'rhc', 'treatment')), None)
-        if treat_col is None:
-            raise ValueError(f"Cannot detect treatment column. Found: {list(df.columns)}")
-
-        if df[treat_col].dtype == object or pd.api.types.is_string_dtype(df[treat_col]):
-            W = (df[treat_col].str.strip().str.upper() == 'RHC').astype(int).values
-        else:
-            W = df[treat_col].astype(int).values
-
-        # Outcome: prefer 30-day mortality (dth30); fall back to overall death.
-        outcome_col = next((c for c in df.columns if c in ('dth30', 'death', 'dth')), None)
-        if outcome_col is None:
-            raise ValueError(f"Cannot detect outcome column. Found: {list(df.columns)}")
-
-        if df[outcome_col].dtype == object or pd.api.types.is_string_dtype(df[outcome_col]):
-            Y = df[outcome_col].str.strip().str.lower().map(
-                {'yes': 1, 'no': 0, 'true': 1, 'false': 0, '1': 1, '0': 0}
-            ).fillna(0).astype(int).values
-        else:
-            Y = df[outcome_col].astype(int).values
-
-        # Drop IDs and post-treatment / survival-time columns to avoid leakage.
-        exclude = {treat_col, outcome_col, 'ptid', 'surv2md1', 't3d30', 'dth30', 'death',
-                   'unnamed: 0', ''}
-        feature_cols = [c for c in df.columns if c not in exclude and c.strip() != '']
-        X = df[feature_cols].copy()
-        return _prepare_features(X), W, Y
+        df = _read_lower(_raw("rhc.csv", "https://hbiostat.org/data/repo/rhc.csv"))
+        W = (df['swang1'].str.strip().str.upper() == 'RHC').astype(int).values
+        Y = (df['death'].str.strip().str.lower() == 'yes').astype(int).values
+        # IDs and post-treatment columns; the dates leak Y (dthdte is NaN iff death == 0).
+        exclude = {'swang1', 'dth30', 'ptid', 'surv2md1', 't3d30', 'death',
+                   'sadmdte', 'dschdte', 'dthdte', 'lstctdte', 'unnamed: 0'}
+        return _features(df, exclude), W, Y
 
     X, W, Y = _load_or_fetch('rhc', fetch)
-    return UpliftDataset(X=X, W=W, Y=Y, propensity_true=None, name='rhc',
-                         test_size=test_size, random_state=random_state)
+    return UpliftDataset(X=X, W=W, Y=Y, name='rhc', test_size=test_size, random_state=random_state)
 
 
 def load_cattaneo(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
-    """Cattaneo (2010) birthweight dataset. Observational.
-
-    Treatment: maternal smoking during pregnancy.
-    Outcome: low birth weight (< 2500g).
-    Source: https://raw.githubusercontent.com/scunning1975/mixtape/master/cattaneo2.dta
-    """
+    """Cattaneo (2010) birthweight data. W: maternal smoking, Y: birth weight < 2500 g."""
     def fetch():
-        candidates = [RAW_DIR / "cattaneo2.dta", RAW_DIR / "cattaneo2.csv"]
-        path = next((p for p in candidates if p.exists()), None)
-        if path is None:
-            raise FileNotFoundError(
-                f"Cattaneo data not found. Place cattaneo2.dta or cattaneo2.csv in {RAW_DIR}/.\n"
-                "Source: https://raw.githubusercontent.com/scunning1975/mixtape/master/cattaneo2.dta"
-            )
-
-        if path.suffix == '.dta':
-            df = pd.read_stata(path)
-        else:
-            df = pd.read_csv(path)
-
-        cols_lower = {c: c.lower().strip() for c in df.columns}
-        df.rename(columns=cols_lower, inplace=True)
-
-        # Treatment: mbsmoke (maternal smoking).
-        treat_col = next((c for c in df.columns if c in ('mbsmoke', 'smoke', 'treatment')), None)
-        if treat_col is None:
-            raise ValueError(f"Cannot detect treatment column. Found: {list(df.columns)}")
-
-        if df[treat_col].dtype == object or isinstance(df[treat_col].dtype, pd.CategoricalDtype):
-            mapping = {v: (1 if v.lower() in ('smoker', 'yes', '1') else 0) for v in df[treat_col].unique()}
-            W = df[treat_col].map(mapping).values
-        else:
-            W = df[treat_col].astype(int).values
-
-        # Outcome: low birth weight (use lbweight if present, else threshold bweight at 2500g).
-        if 'lbweight' in df.columns:
-            Y = df['lbweight'].astype(int).values
-        elif 'bweight' in df.columns:
-            Y = (df['bweight'] < 2500).astype(int).values
-        else:
-            raise ValueError(f"Cannot detect outcome column. Found: {list(df.columns)}")
-
-        # msmoke (smoking intensity) perfectly predicts treatment → exclude.
-        exclude = {treat_col, 'lbweight', 'bweight', 'msmoke'}
-        feature_cols = [c for c in df.columns if c not in exclude and c.strip() != '']
-        X = df[feature_cols].copy()
-        return _prepare_features(X), W, Y
+        df = _read_lower(_raw("cattaneo2.dta", "https://raw.githubusercontent.com/scunning1975/mixtape/master/cattaneo2.dta"))
+        W = (df['mbsmoke'] == 'Smoker').astype(int).values
+        Y = df['lbweight'].astype(int).values
+        # msmoke (smoking intensity) determines W.
+        return _features(df, {'mbsmoke', 'lbweight', 'bweight', 'msmoke'}), W, Y
 
     X, W, Y = _load_or_fetch('cattaneo', fetch)
-    return UpliftDataset(X=X, W=W, Y=Y, propensity_true=None, name='cattaneo',
-                         test_size=test_size, random_state=random_state)
+    return UpliftDataset(X=X, W=W, Y=Y, name='cattaneo', test_size=test_size, random_state=random_state)
 
 
 def load_nhefs(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
-    """NHEFS dataset (Hernan & Robins, Causal Inference textbook). Observational.
-
-    Treatment: quit smoking (1 = quit, 0 = did not quit).
-    Outcome: death by 1992.
-    Source: https://cdn1.sph.harvard.edu/wp-content/uploads/sites/1268/1268/20/nhefs.csv
-    """
+    """NHEFS (Hernán & Robins). W: quit smoking, Y: death by 1992."""
     def fetch():
-        candidates = [RAW_DIR / "nhefs.csv", RAW_DIR / "nhefs.dta"]
-        path = next((p for p in candidates if p.exists()), None)
-        if path is None:
-            raise FileNotFoundError(
-                f"NHEFS data not found. Place nhefs.csv in {RAW_DIR}/.\n"
-                "Source: https://cdn1.sph.harvard.edu/wp-content/uploads/sites/1268/1268/20/nhefs.csv"
-            )
-
-        if path.suffix == '.dta':
-            df = pd.read_stata(path)
-        else:
-            df = pd.read_csv(path)
-
-        cols_lower = {c: c.lower().strip() for c in df.columns}
-        df.rename(columns=cols_lower, inplace=True)
-
-        treat_col = next((c for c in df.columns if c in ('qsmk', 'quit_smoking', 'treatment')), None)
-        if treat_col is None:
-            raise ValueError(f"Cannot detect treatment column. Found: {list(df.columns)}")
-        W = df[treat_col].astype(int).values
-
-        outcome_col = next((c for c in df.columns if c in ('death', 'died', 'y')), None)
-        if outcome_col is None:
-            raise ValueError(f"Cannot detect outcome column. Found: {list(df.columns)}")
-        Y = df[outcome_col].astype(int).values
-
-        # IDs and post-treatment columns dropped to avoid leakage.
-        exclude = {treat_col, outcome_col, 'seqn', 'id', 'wt82', 'wt82_71',
-                   'yrdth', 'modth', 'dadth', 'smkintensity82_71', 'censored'}
-        feature_cols = [c for c in df.columns if c not in exclude and c.strip() != '']
-        X = df[feature_cols].copy()
-
-        valid = np.isfinite(W) & np.isfinite(Y)
-        X, W, Y = X.loc[valid].reset_index(drop=True), W[valid], Y[valid]
-        return _prepare_features(X), W, Y
+        df = _read_lower(_raw("nhefs.csv", "https://cdn1.sph.harvard.edu/wp-content/uploads/sites/1268/1268/20/nhefs.csv"))
+        W = df['qsmk'].astype(int).values
+        Y = df['death'].astype(int).values
+        # IDs and post-treatment columns.
+        exclude = {'qsmk', 'death', 'seqn', 'id', 'wt82', 'wt82_71', 'yrdth', 'modth', 'dadth',
+                   'smkintensity82_71', 'censored'}
+        return _features(df, exclude), W, Y
 
     X, W, Y = _load_or_fetch('nhefs', fetch)
-    return UpliftDataset(X=X, W=W, Y=Y, propensity_true=None, name='nhefs',
-                         test_size=test_size, random_state=random_state)
+    return UpliftDataset(X=X, W=W, Y=Y, name='nhefs', test_size=test_size, random_state=random_state)
 
 
 def load_jtpa(test_size: float = 0.2, random_state: int = 42) -> UpliftDataset:
-    """JTPA (Job Training Partnership Act) dataset. Observational.
-
-    Treatment: D2 — actual job-training participation (confounded by self-selection).
-    Outcome: Y2 — employed post-training (binary).
-    Features: sex, n_hs2 (months since HS), edu, prevearn.
-    Source: Abadie, Angrist & Imbens (2002).
-    """
+    """JTPA (Abadie, Angrist & Imbens, 2002). W: actual training participation
+    (self-selected), Y: employed afterwards."""
     def fetch():
-        candidates = [RAW_DIR / "jtpa.csv", RAW_DIR / "jtpa.dta"]
-        path = next((p for p in candidates if p.exists()), None)
-        if path is None:
-            raise FileNotFoundError(
-                f"JTPA data not found. Place jtpa.csv in {RAW_DIR}/."
-            )
-
-        if path.suffix == '.dta':
-            df = pd.read_stata(path)
-        else:
-            df = pd.read_csv(path)
-
-        cols_lower = {c: c.lower().strip() for c in df.columns}
-        df.rename(columns=cols_lower, inplace=True)
-
-        # D2 is actual participation (confounded); D1/Z1/Z2 are random offer / instruments
-        # and Y1/earnings are post-treatment — all excluded so only pre-treatment X remains.
+        df = _read_lower(_raw("jtpa.csv", "Abadie, Angrist & Imbens (2002)"))
         W = df['d2'].astype(int).values
         Y = df['y2'].astype(int).values
-
-        exclude = {'z1', 'z2', 'd1', 'd2', 'y1', 'y2', 'earnings'}
-        feature_cols = [c for c in df.columns if c not in exclude]
-        X = df[feature_cols].copy()
-
-        return _prepare_features(X), W, Y
+        # Random offer / instruments (z1, z2, d1) and post-treatment outcomes.
+        return _features(df, {'z1', 'z2', 'd1', 'd2', 'y1', 'y2', 'earnings'}), W, Y
 
     X, W, Y = _load_or_fetch('jtpa', fetch)
-    return UpliftDataset(X=X, W=W, Y=Y, propensity_true=None, name='jtpa',
-                         test_size=test_size, random_state=random_state)
+    return UpliftDataset(X=X, W=W, Y=Y, name='jtpa', test_size=test_size, random_state=random_state)
 
 
-# Datasets are listed in ascending order of conversion rate within each group.
-RCT_DATASETS = ['H(Conv)', 'Twins', 'Criteo', 'Lenta', 'H(Vis)', 'MegaFon', 'X5']
+# --- Semi-synthetic DGP --------------------------------------------------------
+# Covariates bootstrapped from Criteo; mu_0(x) and tau(x) are smooth surfaces on
+# different feature mixes. A shared scale s hits the target E[Y] and leaves
+# tau = mu_1/mu_0 unchanged. Known e = 0.5; exact tau(x), mu_0(x) for the oracle.
+
+_SYNTH_FEATURES = ['f0', 'f2', 'f3', 'f5', 'f6', 'f7', 'f9', 'f10']
+_SYNTH_POOL_PATH = CACHE_DIR / 'synth_covariate_pool.feather'
+_SYNTH_POOL_SIZE = 500_000
+_synth_pool_cache: Optional[tuple] = None
+
+
+def _synth_pool() -> tuple[pd.DataFrame, pd.Series, pd.Series]:
+    """Cached (pool, mean, std): a fixed Criteo subsample defining the DGP scale."""
+    global _synth_pool_cache
+    if _synth_pool_cache is not None:
+        return _synth_pool_cache
+
+    if _SYNTH_POOL_PATH.exists():
+        pool = pd.read_feather(_SYNTH_POOL_PATH)
+    else:
+        criteo_path = CACHE_DIR / 'criteo_100pct.feather'
+        if not criteo_path.exists():
+            load_criteo()  # populate the Criteo cache once
+        criteo = pd.read_feather(criteo_path, columns=_SYNTH_FEATURES)
+        rng = np.random.RandomState(0)  # fixed: the pool is part of the DGP
+        idx = rng.choice(len(criteo), size=min(_SYNTH_POOL_SIZE, len(criteo)),
+                         replace=False)
+        pool = criteo.iloc[idx].reset_index(drop=True)
+        pool.to_feather(_SYNTH_POOL_PATH)
+
+    mean, std = pool.mean(), pool.std().clip(lower=1e-8)
+    _synth_pool_cache = (pool, mean, std)
+    return _synth_pool_cache
+
+
+def _std_surface(v: np.ndarray, target_mean: float, target_std: float) -> np.ndarray:
+    """Standardise a raw surface to a fixed mean/std (isolates form from scale)."""
+    return target_mean + target_std * (v - v.mean()) / (v.std() + 1e-12)
+
+
+def _baseline_logit(Z: np.ndarray) -> np.ndarray:
+    """Logit of the baseline shape g_0(x); mu_0 = s * sigmoid(this)."""
+    z0, z2, z6 = Z[:, 0], Z[:, 1], Z[:, 4]
+    b = z0 - 0.8 * z2 + 0.6 * z6
+    return _std_surface(b, 0.0, 1.2)
+
+
+def _logtau_fixed(Z: np.ndarray) -> np.ndarray:
+    """log tau(x), fixed across the grid; different feature mix than the baseline."""
+    z0, z2, z6, z9 = Z[:, 0], Z[:, 1], Z[:, 4], Z[:, 6]
+    lt = 0.5 * z2 - 0.4 * z6 + 0.4 * z2 * z9 + 0.3 * np.tanh(z0)
+    return _std_surface(lt, 0.25, 0.5)
+
+
+def _synth_scale(shape: np.ndarray, tau: np.ndarray, target_cvr: float,
+                 e: float = 0.5, eps: float = 1e-5) -> float:
+    """Bisection for the multiplicative scale s giving marginal E[Y] ~ target."""
+    lo, hi = 0.0, 1e6
+    for _ in range(100):
+        s = 0.5 * (lo + hi)
+        mu0 = np.clip(s * shape, eps, 1 - eps)
+        mu1 = np.clip(tau * s * shape, eps, 1 - eps)
+        ey = np.mean(e * mu1 + (1 - e) * mu0)  # e scalar or per unit
+        lo, hi = (s, hi) if ey < target_cvr else (lo, s)
+    return 0.5 * (lo + hi)
+
+
+# Confounded variant: logit e(x) = CONF_SLOPE * z0, clipped for overlap.
+CONF_SLOPE = 0.8
+CONF_CLIP = (0.1, 0.9)
+
+
+def load_synthetic_DGP(conversion_rate: float = 0.02, n_conv_train: int = 800,
+                       n_test: int = 100_000, e: float = 0.5,
+                       random_state: int = 42, eps: float = 1e-5,
+                       confounded: bool = False) -> UpliftDataset:
+    """Synthetic ratio-CATE dataset at a target conversion rate and training converter count.
+
+    n_train = n_conv_train / conversion_rate; n_test is fixed (the oracle Qini
+    needs no test converters). ``eps`` floors mu_0 and mu_1 and must stay well
+    below the smallest conversion rate, else tau collapses toward 1.
+    ``confounded``: e(x) = sigmoid(CONF_SLOPE * z0), z0 also drives the baseline;
+    no design propensity is passed on (handled as observational).
+    """
+    n_train = max(1, round(n_conv_train / conversion_rate))
+    n = n_train + n_test
+
+    pool, mean, std = _synth_pool()
+    rng = np.random.RandomState(random_state)
+    X = pool.iloc[rng.randint(0, len(pool), size=n)].reset_index(drop=True)
+    Z = ((X[_SYNTH_FEATURES] - mean) / std).to_numpy()
+
+    shape = 1.0 / (1.0 + np.exp(-_baseline_logit(Z)))
+    tau = np.exp(_logtau_fixed(Z))
+    if confounded:
+        e = np.clip(1.0 / (1.0 + np.exp(-CONF_SLOPE * Z[:, 0])), *CONF_CLIP)
+    s = _synth_scale(shape, tau, conversion_rate, e=e, eps=eps)
+    mu0 = np.clip(s * shape, eps, 1 - eps)
+    mu1 = np.clip(tau * s * shape, eps, 1 - eps)
+
+    W = rng.binomial(1, e, size=n).astype(np.int32)
+    Y = rng.binomial(1, np.where(W == 1, mu1, mu0)).astype(np.int32)
+    prefix = 'synthconf' if confounded else 'synthetic'
+    return UpliftDataset(X=X, W=W, Y=Y, tau_true=mu1 / mu0, mu0_true=mu0,
+                         propensity_true=None if confounded else np.full(n, e), oracle_truth=True,
+                         name=f'{prefix}_{conversion_rate}_{n_conv_train}',
+                         test_size=n_test, random_state=random_state)
+
+
+def parse_synthetic_name(name: str) -> tuple[float, int]:
+    """(conversion_rate, n_conv_train) from a ``synthetic_`` / ``synthconf_<rate>_<n>`` name."""
+    if not name.startswith(('synthetic_', 'synthconf_')):
+        raise ValueError(f"Not a synthetic dataset name: {name!r}")
+    rate_str, conv_str = name.split('_', 1)[1].rsplit('_', 1)
+    return float(rate_str), int(conv_str)
+
+
+# --- RCT datasets: <base>_12800, or <base>_all (whole pool) if smaller ---------
+# Per seed: random 20% test split (capped at RCT_TEST_CAP), train drawn from the
+# other 80% stratified by Y at the natural CVR. Sampling within Y strata keeps
+# P(W|X,Y), so the design propensity stays valid for Q-Simple.
+
+# Ascending conversion rate.
+RCT_BASES = ['H(Conv)', 'Twins', 'Criteo', 'Lenta', 'H(Vis)', 'MegaFon', 'X5']
+RCT_MAIN_CONVERTERS = 12_800  # training converters: 12,800, or the whole pool if smaller
+RCT_TEST_CAP = 500_000  # only Criteo is affected
+
+# Converters in the 80% train pool (one split; Twins varies by seed).
+_RCT_POOL_CONVERTERS = {'H(Conv)': 462, 'Twins': 2005, 'Criteo': 525_543, 'Lenta': 59_494,
+                        'H(Vis)': 7515, 'MegaFon': 98_011, 'X5': 99_202}
+_rct_base_cache: dict = {}
+
+
+def _rct_level(base: str):
+    return RCT_MAIN_CONVERTERS if _RCT_POOL_CONVERTERS[base] >= RCT_MAIN_CONVERTERS else 'all'
+
+
+def load_rct_level(base: str, n_conv_train, test_size: float = 0.2,
+                   random_state: int = 42) -> UpliftDataset:
+    """One RCT base at a training converter count (int, or 'all' for the whole pool)."""
+    if base == 'Twins':  # W is simulated per seed -> reload, don't cache
+        full = get_dataset(base, random_state=random_state)
+    else:
+        if base not in _rct_base_cache:
+            _rct_base_cache[base] = get_dataset(base)
+        full = _rct_base_cache[base]
+    X, W, Y = full.X.reset_index(drop=True), full.W, full.Y
+
+    rng = np.random.RandomState(random_state)
+    perm = rng.permutation(len(Y))
+    n_split = int(round(test_size * len(Y)))
+    test, pool = perm[:min(n_split, RCT_TEST_CAP)], perm[n_split:]
+
+    if n_conv_train == 'all':
+        train = pool
+    else:
+        pos, neg = pool[Y[pool] == 1], pool[Y[pool] == 0]
+        if n_conv_train > len(pos):
+            raise ValueError(f"{base}: pool has {len(pos)} converters < {n_conv_train}.")
+        n_neg = int(round(n_conv_train * len(neg) / len(pos)))
+        train = np.concatenate([rng.choice(pos, n_conv_train, replace=False),
+                                rng.choice(neg, n_neg, replace=False)])
+        rng.shuffle(train)
+
+    idx = np.concatenate([train, test])
+    return UpliftDataset(X=X.iloc[idx].reset_index(drop=True), W=W[idx], Y=Y[idx],
+                         propensity_true=full.propensity_true[idx],
+                         tau_true=None if full.tau_true is None else full.tau_true[idx],
+                         name=f'{base}_{n_conv_train}', test_size=len(test), shuffle=False,
+                         random_state=random_state)
+
+
+# --- Registry -----------------------------------------------------------------
+
+# Synthetic grid: conversion rate -> training converter counts.
+SYNTHETIC_GRID = {
+    0.002: [50, 100, 200, 400, 800, 1600],
+    0.01:  [50, 100, 200, 400, 800, 1600, 3200, 6400, 12_800],
+    0.05:  [50, 100, 200, 400, 800, 1600, 3200, 6400, 12_800],
+    0.2:   [50, 100, 200, 400, 800, 1600, 3200, 6400, 12_800],
+}
+
+SYNTHETIC_DATASETS = [f'synthetic_{r}_{c}' for r, cs in SYNTHETIC_GRID.items() for c in cs]
+SYNTHCONF_DATASETS = [f'synthconf_0.02_{c}' for c in (800, 3200, 12_800)]
+RCT_DATASETS = [f'{b}_{_rct_level(b)}' for b in RCT_BASES]
 OBS_DATASETS = ['Cattaneo', 'NHEFS', 'JTPA', 'RHC']
-ALL_DATASETS = RCT_DATASETS + OBS_DATASETS
 
-# Marginal conversion rate (E[Y] over the full sample) per dataset.
-# Used by analysis code that splits results by conversion-rate regime.
-# Values may differ slightly from paper Tables 1/2 due to loader-level
-# binarisation / filtering.
+# Marginal conversion rate E[Y] over the full sample, ascending within group.
 CONVERSION_RATES = {
-    # RCT, ascending
     'H(Conv)':  0.009,
     'Twins':    0.036,
     'Criteo':   0.047,
@@ -534,31 +514,43 @@ CONVERSION_RATES = {
     'H(Vis)':   0.147,
     'MegaFon':  0.204,
     'X5':       0.620,
-    # Observational, ascending
     'Cattaneo': 0.060,
     'NHEFS':    0.195,
     'JTPA':     0.500,
     'RHC':      0.649,
 }
+CONVERSION_RATES.update({name: parse_synthetic_name(name)[0] for name in SYNTHETIC_DATASETS + SYNTHCONF_DATASETS})
+CONVERSION_RATES.update({name: CONVERSION_RATES[name.rsplit('_', 1)[0]] for name in RCT_DATASETS})
+
 
 def get_dataset(name: str, **kwargs) -> UpliftDataset:
     """Load dataset by name."""
     loaders = {
         'H(Vis)':   lambda **kw: load_hillstrom('visit', **kw),
         'H(Conv)':  lambda **kw: load_hillstrom('conversion', **kw),
+        'Twins':    load_twins,
         'Criteo':   load_criteo,
         'MegaFon':  load_megafon,
         'X5':       load_x5_retail,
         'Lenta':    load_lenta,
         'RHC':      load_rhc,
-        'Twins':    load_twins,
         'Cattaneo': load_cattaneo,
         'NHEFS':    load_nhefs,
         'JTPA':     load_jtpa,
     }
 
+    if name.startswith('synthetic_'):
+        cvr, n_conv_train = parse_synthetic_name(name)
+        return load_synthetic_DGP(conversion_rate=cvr, n_conv_train=n_conv_train, **kwargs)
+    if name.startswith('synthconf_'):
+        cvr, n_conv_train = parse_synthetic_name(name)
+        return load_synthetic_DGP(conversion_rate=cvr, n_conv_train=n_conv_train,
+                                  confounded=True, **kwargs)
+
+    base, _, level = name.rpartition('_')
+    if base in RCT_BASES:
+        return load_rct_level(base, level if level == 'all' else int(level), **kwargs)
+
     if name not in loaders:
         raise ValueError(f"Unknown: {name}. Available: {list(loaders.keys())}")
     return loaders[name](**kwargs)
-
-
