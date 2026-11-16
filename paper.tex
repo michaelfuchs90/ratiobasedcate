@@ -1014,8 +1014,8 @@ conversion rates at a given number of converters.
 
 \paragraph{The Q- and Q-Simple-Learners coincide.}
 With regard to the Qini, the two are identical for the practitioner
-(significant differences on $3$ of the $36$ datasets, close to chance level, and
-never more than $0.08$). Only their calibration differs below about $800$
+(significant differences on $5$ of the $36$ datasets, never more than
+$0.08$). Only their calibration differs below about $800$
 converters, where the estimated propensity costs the Q-Learner up to $0.38$
 log units; from $800$ converters on, the difference is at most $0.012$.
 The asymptotic advantage of
@@ -2095,10 +2095,11 @@ on every randomized dataset, at $12{,}800$ training converters or the whole
 pool. A dagger marks a tuned variant whose paired difference
 to its untuned learner is significant (Appendix~\ref{app:stest}). Two results
 are not visible in the tables. The direct-scale augmentations underpredict the level on every randomized
-dataset, by a median of about $2$ to $11$ log units, and on H(Conv) all of
+dataset except DR-S on X5, by a median of about $2$ to $11$ log units, and on H(Conv) all of
 them sit at the floor of $10^{-10}$, as on synthetic data. Unlike on
 synthetic data, DR-Q-Simple on the log scale explodes on H(Conv), the
-smallest dataset, in every split.
+smallest dataset: its calibration error exceeds $10$ in every split
+and $100$ in two thirds of them.
 
 \begin{table}[H]
 \centering

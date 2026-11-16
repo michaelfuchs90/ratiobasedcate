@@ -1,6 +1,7 @@
 """Hyperparameter tuning (Optuna TPE, seed 0) per (learner, dataset): maximise a
 5-fold CV score on TUNING_SEEDS (disjoint from the benchmark seeds), resumable
-via TUNED_PARAMS_CSV.
+via TUNED_PARAMS_CSV. On real data the tuning seeds are other splits of the same
+units, so tuning and benchmark test sets share units.
   S / Q-Simple / Q: neg log-loss of the model's own task (Y on X,W / W on X among
                     converters / W on X; Q's p-model reuses the Q-Simple row)
   T1 / T0:          neg log-loss of T's outcome model in the treated / control arm

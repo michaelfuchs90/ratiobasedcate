@@ -13,8 +13,10 @@ The **Q-Learner** writes τ(x) as a ratio of two odds and so reduces ratio-CATE
 estimation for binary outcomes to two classification tasks: the treatment propensity among
 converters, p(x) = P(W = 1 | X = x, Y = 1), and the propensity e(x). Tuning these classifiers
 on log-loss tunes the effect estimate itself. The **Q-Simple-Learner** uses the known constant
-propensity of randomized data. The repository also contains the S-, T-, X-, R- and AIPW-DR
-learners, doubly robust DR-S/T/Q/Q-Simple learners in direct and log scale, the ratio Qini and
+propensity of randomized data; in biostatistics it is known as the case-only estimator
+(Vittinghoff & Bauer 2006; Dai et al. 2018). The repository also contains the S-, T-, X-, R- and
+AIPW-DR learners, the augmented DR-S/T/Q/Q-Simple learners (Neyman-orthogonal, but not doubly
+robust in the classical sense) in direct and log scale, the ratio Qini and
 the calibration metrics, and the full benchmark (synthetic, randomized and observational data).
 
 ## Installation
@@ -60,6 +62,7 @@ benchmark.py        resume-aware benchmark loop -> results_{synthetic,synthconf,
 stest.py            variance factors of the corrected resampled t-test (stest_*.csv)
 visualization.py    figures and tables of the paper
 Benchmark.ipynb     runs everything above and writes every figure and table of paper.tex
+tables/             the tables as written by the notebook
 paper.tex           paper source (fig_*.png, arxiv.sty)
 data/raw/           redistributed raw data (see below)
 ```
@@ -68,7 +71,7 @@ data/raw/           redistributed raw data (see below)
 
 Run `Benchmark.ipynb` top to bottom. With the shipped CSVs, tuning (section 3), benchmark and
 significance diagnostic (section 4) find nothing left to do (they resume from the CSVs), and
-sections 6-7 regenerate the six figures and write all tables into `paper.tex`. To recompute
+sections 6-7 regenerate the six figures and write all tables to `tables/` (and into `paper.tex`). To recompute
 from scratch, delete `tuned_params.csv`, `results_*.csv`, `stest_*.csv` and
 `oracle_synthetic.csv`; tuning the synthetic datasets alone took about 150 hours.
 Even then, the notebook loads every dataset (for the significance diagnostic and the dataset
@@ -99,6 +102,7 @@ training pool).
 
 Loaded datasets are cached as feather files in `data/processed/`. If you use a dataset, please
 cite its original source as well as this paper.
+RHC: Data obtained from http://biostat.mc.vanderbilt.edu/DataSets.
 
 ## Citation
 

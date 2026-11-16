@@ -1,6 +1,6 @@
 """
 Figures and tables of paper.tex, called from sections 6-7 of ``Benchmark.ipynb``;
-tables are written into paper.tex by ``put_table``. ``oracle_qini`` recomputes the
+``put_table`` writes tables to tables/ and, if present, into paper.tex. ``oracle_qini`` recomputes the
 oracle Qini (no fitting), which the results CSV does not store.
 """
 
@@ -530,11 +530,19 @@ def table_full(df: pd.DataFrame, by: str, cols: list, metric: str, log: bool = F
     return '\n'.join(lines + [r'\hline', r'\end{tabular}'])
 
 
-def put_table(tabular: str, label: str, tex_path: str = 'paper.tex') -> None:
-    r"""Replace the ``tabular`` following ``\label{label}`` in ``tex_path``
+def put_table(tabular: str, label: str, tex_path: str = 'paper.tex', out_dir: str = 'tables') -> None:
+    r"""Write ``tabular`` to ``out_dir/<label>.tex`` (':' -> '_'); if ``tex_path``
+    exists and has ``\label{label}``, also replace the ``tabular`` after it
     (caption, label and size commands stay as written; line endings kept)."""
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, label.replace(':', '_') + '.tex'), 'w', encoding='utf-8') as f:
+        f.write(tabular + '\n')
+    if not os.path.exists(tex_path):
+        return
     with open(tex_path, encoding='utf-8', newline='') as f:
         s = f.read()
+    if r'\label{%s}' % label not in s:
+        return
     start = s.index(r'\begin{tabular}', s.index(r'\label{%s}' % label))
     end = s.index(r'\end{tabular}', start) + len(r'\end{tabular}')
     nl = '\r\n' if '\r\n' in s else '\n'
