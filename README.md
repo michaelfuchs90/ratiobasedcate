@@ -70,11 +70,15 @@ Run `Benchmark.ipynb` top to bottom. With the shipped CSVs, tuning (section 3), 
 significance diagnostic (section 4) find nothing left to do (they resume from the CSVs), and
 sections 6-7 regenerate the six figures and write all tables into `paper.tex`. To recompute
 from scratch, delete `tuned_params.csv`, `results_*.csv`, `stest_*.csv` and
-`oracle_synthetic.csv`; tuning the synthetic datasets alone took about 90 hours.
+`oracle_synthetic.csv`; tuning the synthetic datasets alone took about 150 hours.
+Even then, the notebook loads every dataset (for the significance diagnostic and the dataset
+tables), so Criteo (several GB) is downloaded and Lenta must be placed manually (see below).
+`N_JOBS` and `n_jobs` in the notebook assume a large machine; lower them if needed.
 
 ## Datasets
 
-Synthetic datasets (`synthetic_<rate>_<converters>`) bootstrap their covariates from Criteo;
+Synthetic datasets (`synthetic_<rate>_<converters>`) bootstrap their covariates from a fixed
+subsample of Criteo, built once from the `scikit-uplift` download and cached in `data/processed/`;
 `synthconf_<rate>_<converters>` is the confounded variant, with e(x) depending on the covariates
 and no design propensity.
 Randomized datasets: `<base>_12800` (12,800 training converters) or `<base>_all` (whole
@@ -90,7 +94,7 @@ training pool).
 | Twins | semi-synthetic | [Louizos et al. 2017](https://github.com/AMLab-Amsterdam/CEVAE) | `data/raw/twin_pairs_*.csv` |
 | Cattaneo | observational | [Cattaneo 2010](https://raw.githubusercontent.com/scunning1975/mixtape/master/cattaneo2.dta) | `data/raw/cattaneo2.dta` |
 | NHEFS | observational | [Hernán & Robins 2020](https://www.hsph.harvard.edu/miguel-hernan/causal-inference-book/) | `data/raw/nhefs.csv` |
-| JTPA | observational | [Abadie et al. 2002](https://economics.mit.edu/faculty/angrist/data1/data/abangim02) | `data/raw/jtpa.csv` |
+| JTPA | observational | [Abadie et al. 2002](https://economics.mit.edu/people/faculty/josh-angrist/angrist-data-archive) | `data/raw/jtpa.csv` |
 | RHC | observational | [Connors et al. 1996](https://hbiostat.org/data/) | `data/raw/rhc.csv` |
 
 Loaded datasets are cached as feather files in `data/processed/`. If you use a dataset, please
@@ -101,7 +105,7 @@ cite its original source as well as this paper.
 ```bibtex
 @article{fuchs2026ratiocate,
   title   = {Beyond Differences: Estimating and Tuning Ratio-Based Treatment Effects},
-  author  = {Fuchs, Michael and Krei{\ss}, Dominik},
+  author  = {Fuchs, Michael and Kreiss, Dominik},
   journal = {arXiv preprint arXiv:2605.26288},
   year    = {2026}
 }

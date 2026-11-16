@@ -88,29 +88,21 @@ def _prepare_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _load_or_fetch(name: str, fetch_fn) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
-    """Load from feather cache or fetch via ``fetch_fn`` and persist for next time."""
+    """Load from feather cache; fetch via ``fetch_fn`` and cache first if missing."""
     path = CACHE_DIR / f"{name}.feather"
-
-    if path.exists():
-        df = pd.read_feather(path)
-        W = df.pop('__W__').to_numpy(dtype=np.int32)
-        Y = df.pop('__Y__').to_numpy(dtype=np.int32)
-        df = _prepare_features(df)
-        return df, W, Y
-
-    X, W, Y = fetch_fn()
-    X = _prepare_features(X)
-
-    # Feather cannot store categoricals with mixed types — coerce to string.
-    df_save = X.copy()
-    for col in df_save.columns:
-        if df_save[col].dtype.name == 'category':
-            df_save[col] = df_save[col].astype(str)
-    df_save['__W__'] = W
-    df_save['__Y__'] = Y
-    df_save.to_feather(path)
-
-    return X, W, Y
+    if not path.exists():
+        X, W, Y = fetch_fn()
+        X = _prepare_features(X)
+        # Feather cannot store mixed-type categoricals: save them as strings.
+        for col in X.columns:
+            if X[col].dtype.name == 'category':
+                X[col] = X[col].astype(str)
+        X['__W__'], X['__Y__'] = W, Y
+        X.to_feather(path)
+    df = pd.read_feather(path)
+    W = df.pop('__W__').to_numpy(dtype=np.int32)
+    Y = df.pop('__Y__').to_numpy(dtype=np.int32)
+    return _prepare_features(df), W, Y
 
 
 def _raw(file: str, source: str) -> Path:
